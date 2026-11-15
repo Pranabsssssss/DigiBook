@@ -32,6 +32,11 @@ class InvalidPinError(AuthError):
     pass
 
 
+class PinNotSetError(AuthError):
+    """Raised when web authentication is attempted before the student creates their PIN at the whiteboard."""
+    pass
+
+
 class AccountLockedError(AuthError):
     pass
 
@@ -287,7 +292,8 @@ def authenticate_email_pin(
         raise StudentNotFoundError("Invalid email or PIN.")
 
     if not student.pin_set or not student.pin_hash:
-        raise InvalidPinError("Student PIN has not been set yet. Please login on the physical whiteboard first.")
+        log_audit_event("LOGIN_BLOCKED_NO_PIN", student_id=student.id, detail="Web login blocked: PIN not set on whiteboard yet", ip_address=ip_address, db=db)
+        raise PinNotSetError("Your 4-digit PIN has not been set yet. Please scan your RFID card on the physical whiteboard to create your PIN before signing in online.")
 
     if not verify_pin(pin, student.pin_hash):
         log_audit_event("LOGIN_FAIL", student_id=student.id, detail=f"Invalid PIN for email: {email}", ip_address=ip_address, db=db)

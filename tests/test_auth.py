@@ -11,6 +11,7 @@ from core.auth import (
     validate_session,
     revoke_session,
     InvalidPinError,
+    PinNotSetError,
     DuplicateFieldError,
     StudentNotFoundError,
 )
@@ -310,3 +311,32 @@ def test_session_management():
     # Revoke session
     revoke_session(token, db=mock_db)
     assert validate_session(token, db=mock_db) is None
+
+
+def test_web_signin_blocked_until_whiteboard_pin_set():
+    """Verify that a student who registered without setting their PIN at the whiteboard cannot sign in online."""
+    mock_db = MockDatabase()
+    stu = register_student(
+        student_name="Uninitialized Student",
+        student_id="STU_NOPIN_WEB",
+        rfid_key="RFID_NOPIN_WEB",
+        class_name="Math",
+        email="nopin_web@school.edu",
+        pin=None,
+        db=mock_db,
+    )
+    assert stu.pin_set is False
+
+    # Attempting to sign in with ANY PIN must fail with PinNotSetError
+    with pytest.raises(PinNotSetError) as exc_info:
+        authenticate_email_pin("nopin_web@school.edu", "1234", db=mock_db)
+    assert "Your 4-digit PIN has not been set yet" in str(exc_info.value)
+
+    # Now simulate setting PIN at physical whiteboard
+    set_student_pin(stu.id, "1234", db=mock_db)
+
+    # Now web sign-in must succeed
+    authed_student, token = authenticate_email_pin("nopin_web@school.edu", "1234", db=mock_db)
+    assert authed_student.id == stu.id
+    assert len(token) == 64
+

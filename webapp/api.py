@@ -17,6 +17,7 @@ from core.auth import (
     revoke_session,
     AuthError,
     InvalidPinError,
+    PinNotSetError,
     DuplicateFieldError,
     StudentNotFoundError,
     AccountLockedError,
@@ -181,6 +182,8 @@ def api_login():
             "session_token": token,
             "student": student.to_dict(safe=True)
         }), 200
+    except PinNotSetError as e:
+        return jsonify({"success": False, "error": str(e), "code": "PIN_NOT_SET"}), 403
     except (InvalidPinError, StudentNotFoundError) as e:
         return jsonify({"success": False, "error": str(e)}), 401
     except AccountLockedError as e:

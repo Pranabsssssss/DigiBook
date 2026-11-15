@@ -8,6 +8,7 @@ from core.auth import (
     authenticate_email_pin,
     DuplicateFieldError,
     InvalidPinError,
+    PinNotSetError,
     StudentNotFoundError,
     AccountLockedError,
 )
@@ -78,6 +79,8 @@ def signin():
             web_user = WebUser(student)
             login_user(web_user)
             return redirect(url_for("views.dashboard"))
+        except PinNotSetError as e:
+            flash(str(e), "warning")
         except (InvalidPinError, StudentNotFoundError) as e:
             flash(str(e), "danger")
         except AccountLockedError as e:

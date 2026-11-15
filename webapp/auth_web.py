@@ -32,6 +32,8 @@ class WebUser(UserMixin):
         try:
             sid = int(user_id)
             student = get_student_by_id(sid, db=db)
-            return cls(student) if student else None
+            if not student or not student.pin_set or not student.pin_hash:
+                return None
+            return cls(student)
         except (ValueError, TypeError):
             return None

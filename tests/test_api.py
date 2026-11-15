@@ -184,3 +184,40 @@ def test_api_hardware_rfid_scan(client):
     data = res.get_json()
     assert "success" in data
     assert "rfid_key" in data
+
+
+def test_api_web_login_blocked_without_whiteboard_pin(client):
+    """Verify web API /auth/login returns 403 Forbidden for students without whiteboard PIN."""
+    # Register student without PIN
+    res_reg = client.post("/api/v1/auth/register", json={
+        "student_name": "No Pin Web",
+        "student_id": "STU_NOPIN_API",
+        "rfid_key": "RFID_NOPIN_API",
+        "class": "English",
+        "email": "nopin_api@school.edu",
+    })
+    assert res_reg.status_code == 201
+    stu_id = res_reg.get_json()["student"]["id"]
+
+    # Attempting web login before whiteboard PIN creation
+    res_login = client.post("/api/v1/auth/login", json={
+        "email": "nopin_api@school.edu",
+        "pin": "1234"
+    })
+    assert res_login.status_code == 403
+    assert res_login.get_json()["code"] == "PIN_NOT_SET"
+
+    # Set PIN at whiteboard
+    res_set = client.post("/api/v1/auth/set-pin", json={
+        "student_id": stu_id,
+        "pin": "1234"
+    })
+    assert res_set.status_code == 200
+
+    # Web login now succeeds
+    res_login_ok = client.post("/api/v1/auth/login", json={
+        "email": "nopin_api@school.edu",
+        "pin": "1234"
+    })
+    assert res_login_ok.status_code == 200
+    assert "session_token" in res_login_ok.get_json()
