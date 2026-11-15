@@ -12,11 +12,12 @@ class ToolConfig:
 # Available standard palette colors
 COLOR_PALETTE: Dict[str, Tuple[int, int, int]] = {
     "#FFFFFF": (255, 255, 255),  # Pure White (default)
-    "#39FF14": (57, 255, 20),    # Neon Green
-    "#00F0FF": (0, 240, 255),    # Cyan / Blue
+    "#00F0FF": (0, 240, 255),    # Cyan / Electric Blue
+    "#FFB800": (255, 184, 0),    # Amber / Gold
     "#FFE600": (255, 230, 0),    # Bright Yellow
     "#FF3366": (255, 51, 102),   # Coral Red / Pink
     "#FF9900": (255, 153, 0),    # Orange
+    "#39FF14": (0, 240, 255),    # Legacy map to cyan to prevent green optical glare
 }
 
 TOOL_PEN = ToolConfig(name="pen", color_hex="#FFFFFF", rgb=(255, 255, 255), default_width=0.004)

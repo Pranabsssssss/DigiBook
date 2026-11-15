@@ -188,7 +188,7 @@ class WebWhiteboardClient {
 
             if (status) {
                 status.textContent = 'All changes saved';
-                status.style.color = '#39FF14';
+                status.style.color = '#00F0FF';
             }
         } catch (err) {
             console.error('Failed to save whiteboard:', err);

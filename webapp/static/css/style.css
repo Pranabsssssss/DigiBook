@@ -4,8 +4,8 @@
     --bg-input: #1f2735;
     --border-color: #2e3a4e;
     --border-hover: #3d4f6a;
-    --primary-color: #39FF14;
-    --primary-hover: #32e011;
+    --primary-color: #00F0FF;
+    --primary-hover: #00c8d6;
     --accent-cyan: #00F0FF;
     --text-main: #f0f4f8;
     --text-muted: #94a3b8;
@@ -148,7 +148,7 @@ body {
     margin-bottom: 0.75rem;
 }
 
-.alert-success { background-color: rgba(57, 255, 20, 0.15); border: 1px solid var(--primary-color); color: #d4ffd0; }
+.alert-success { background-color: rgba(0, 240, 255, 0.15); border: 1px solid var(--primary-color); color: #d0f7ff; }
 .alert-danger { background-color: rgba(255, 71, 87, 0.15); border: 1px solid var(--danger-color); color: #ffd6db; }
 .alert-warning { background-color: rgba(255, 230, 0, 0.15); border: 1px solid #FFE600; color: #fff8cc; }
 .alert-info { background-color: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: #d0faff; }
@@ -361,7 +361,7 @@ body {
 
 .wb-card-plus:hover {
     border-color: var(--primary-color);
-    background-color: rgba(57, 255, 20, 0.04);
+    background-color: rgba(0, 240, 255, 0.04);
 }
 
 .plus-icon-container {
@@ -446,7 +446,7 @@ body {
 }
 
 .btn-tool.active {
-    background-color: rgba(57, 255, 20, 0.15);
+    background-color: rgba(0, 240, 255, 0.15);
     border-color: var(--primary-color);
     color: var(--primary-color);
 }
@@ -530,13 +530,13 @@ body {
 }
 
 .rfid-scanner-badge.scanning {
-    background-color: rgba(57, 255, 20, 0.1);
-    border-color: rgba(57, 255, 20, 0.45);
+    background-color: rgba(0, 240, 255, 0.1);
+    border-color: rgba(0, 240, 255, 0.45);
     color: var(--primary-color);
 }
 
 .rfid-scanner-badge.success {
-    background-color: rgba(57, 255, 20, 0.2);
+    background-color: rgba(0, 240, 255, 0.2);
     border-color: var(--primary-color);
     color: #ffffff;
     font-weight: 600;
@@ -559,10 +559,10 @@ body {
 
 .input-scanning-active {
     border-color: var(--primary-color) !important;
-    box-shadow: 0 0 8px rgba(57, 255, 20, 0.3) !important;
+    box-shadow: 0 0 8px rgba(0, 240, 255, 0.3) !important;
 }
 
 .input-scan-success {
     border-color: var(--primary-color) !important;
-    background-color: rgba(57, 255, 20, 0.06) !important;
+    background-color: rgba(0, 240, 255, 0.06) !important;
 }
