@@ -153,3 +153,12 @@ def test_api_whiteboard_crud(client, app_and_mock_db):
     # 4. Delete whiteboard
     res_del = client.delete(f"/api/v1/whiteboards/{wb_id}", headers=headers)
     assert res_del.status_code == 200
+
+
+def test_api_hardware_rfid_scan(client):
+    """Test polling the hardware RFID reader endpoint."""
+    res = client.get("/api/v1/hardware/rfid-scan?timeout=0.2")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert "success" in data
+    assert "rfid_key" in data
