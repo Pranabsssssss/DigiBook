@@ -145,7 +145,7 @@ class LocalDashboard:
         pygame.draw.line(surface, (40, 52, 72), (0, 76), (self.width, 76), 2)
 
         if self.font_header:
-            title_surf = self.font_header.render("DigiBook Whiteboard Dashboard", True, (57, 255, 20))
+            title_surf = self.font_header.render("DigiBook Whiteboard Dashboard", True, (0, 240, 255))
             surface.blit(title_surf, (30, 22))
 
         if self.font_user:
@@ -169,14 +169,14 @@ class LocalDashboard:
 
             elif zone.zone_id == "CARD_NEW_PLUS":
                 # Dedicated '+' Card
-                bg = (24, 45, 30) if is_hovered else (18, 24, 34)
-                border = (57, 255, 20) if is_hovered else (45, 65, 85)
+                bg = (20, 45, 60) if is_hovered else (18, 24, 34)
+                border = (0, 240, 255) if is_hovered else (45, 65, 85)
                 pygame.draw.rect(surface, bg, zone.rect, border_radius=10)
                 pygame.draw.rect(surface, border, zone.rect, 3 if is_hovered else 2, border_radius=10)
 
                 # Render large '+' symbol
                 if self.font_plus:
-                    plus_col = (57, 255, 20) if is_hovered else (120, 150, 180)
+                    plus_col = (0, 240, 255) if is_hovered else (120, 150, 180)
                     plus_txt = self.font_plus.render("+", True, plus_col)
                     surface.blit(plus_txt, (rx + (rw - plus_txt.get_width()) // 2, ry + (rh - plus_txt.get_height()) // 2 - 12))
 

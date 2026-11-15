@@ -176,11 +176,11 @@ class PINEntryScreen:
                 hdr = "Confirm Your 4-Digit PIN" if self.is_confirming else "Create a 4-Digit PIN"
             else:
                 hdr = f"Welcome, {self.student.student_name}!"
-            title_surf = self.font_title.render(hdr, True, (57, 255, 20))
+            title_surf = self.font_title.render(hdr, True, (0, 240, 255))
             surface.blit(title_surf, (self.width // 2 - title_surf.get_width() // 2, 40))
 
         if self.font_sub:
-            sub = "Re-enter the same 4 digits" if self.is_confirming else "Point green LED pen at digits to enter PIN"
+            sub = "Re-enter the same 4 digits" if self.is_confirming else "Click with mouse or point pen at digits to enter PIN"
             sub_surf = self.font_sub.render(sub, True, (190, 210, 230))
             surface.blit(sub_surf, (self.width // 2 - sub_surf.get_width() // 2, 85))
 
@@ -191,7 +191,7 @@ class PINEntryScreen:
         for i in range(4):
             dx = dot_start_x + i * dot_spacing
             is_filled = i < len(self.entered_pin)
-            col = (57, 255, 20) if is_filled else (50, 65, 85)
+            col = (0, 240, 255) if is_filled else (50, 65, 85)
             pygame.draw.circle(surface, col, (dx, dot_y), 14, 0 if is_filled else 2)
 
         # Render Keypad Buttons
@@ -199,7 +199,7 @@ class PINEntryScreen:
             rx, ry, rw, rh = zone.rect
             is_hovered = zone.dwell_progress > 0
             bg_col = (35, 55, 80) if is_hovered else (24, 30, 42)
-            border_col = (57, 255, 20) if is_hovered else (50, 70, 95)
+            border_col = (0, 240, 255) if is_hovered else (50, 70, 95)
             pygame.draw.rect(surface, bg_col, zone.rect, border_radius=10)
             pygame.draw.rect(surface, border_col, zone.rect, 2, border_radius=10)
 

@@ -460,14 +460,14 @@ class IRDetector:
             gr = cv2.subtract(g, r)
             gb = cv2.subtract(g, b)
 
-            # Minimum channel lead: G must lead R and B by at least 6
-            _, m_gr = cv2.threshold(gr, 6, 255, cv2.THRESH_BINARY)
-            _, m_gb = cv2.threshold(gb, 6, 255, cv2.THRESH_BINARY)
+            # Minimum channel lead: G must lead R and B by at least 14 to reject neutral/cyan/yellowish light
+            _, m_gr = cv2.threshold(gr, 14, 255, cv2.THRESH_BINARY)
+            _, m_gb = cv2.threshold(gb, 14, 255, cv2.THRESH_BINARY)
             lead = cv2.bitwise_and(m_gr, m_gb)
 
             # Green excess: (G - R) + (G - B) >= threshold
             exc = cv2.add(gr, gb)
-            thresh = int(max(20.0, self.green_excess_threshold))
+            thresh = int(max(30.0, self.green_excess_threshold))
             _, m_exc = cv2.threshold(exc, thresh, 255, cv2.THRESH_BINARY)
             green_active = cv2.bitwise_and(lead, m_exc)
 
@@ -534,14 +534,14 @@ class IRDetector:
 
             peri = cv2.arcLength(c, True)
             circ = (4.0 * np.pi * area) / (peri * peri) if peri > 0 else 0.0
-            min_circ = 0.18 if self.led_type == "green" else 0.18
+            min_circ = 0.26 if self.led_type == "green" else 0.18
             if circ < min_circ:
                 continue
 
             x_b, y_b, w_b, h_b = cv2.boundingRect(c)
             ar = float(w_b) / max(1.0, float(h_b))
-            min_ar = 0.35 if self.led_type == "green" else 0.35
-            max_ar = 2.8 if self.led_type == "green" else 2.8
+            min_ar = 0.40 if self.led_type == "green" else 0.35
+            max_ar = 2.40 if self.led_type == "green" else 2.8
             if not (min_ar <= ar <= max_ar):
                 continue
 
@@ -569,7 +569,8 @@ class IRDetector:
             if self.led_type == "green":
                 p_excess = float(np.max(excess[max(0, y_b):min(h, y_b + h_b), max(0, x_b):min(w, x_b + w_b)]))
                 p_ratio = (2.0 * pg) / max(1.0, pr + pb)
-                if (p_peak < 85.0 or
+                min_peak = max(130.0, float(self.threshold))
+                if (p_peak < min_peak or
                     p_excess < self.green_excess_threshold or
                     p_ratio < self.green_spectral_ratio_min):
                     continue

@@ -94,9 +94,9 @@ class LocalWhiteboardView:
         buttons = [
             ("BTN_PEN", "PEN", lambda: self.engine.select_tool(TOOL_PEN.name)),
             ("BTN_ERASER", "ERASER", lambda: self.engine.select_tool(TOOL_ERASER.name)),
-            ("BTN_COLOR_GREEN", "GREEN", lambda: self.engine.set_color("#39FF14")),
             ("BTN_COLOR_WHITE", "WHITE", lambda: self.engine.set_color("#FFFFFF")),
             ("BTN_COLOR_CYAN", "CYAN", lambda: self.engine.set_color("#00F0FF")),
+            ("BTN_COLOR_YELLOW", "AMBER", lambda: self.engine.set_color("#FFB800")),
             ("BTN_ZOOM_IN", "ZOOM +", lambda: self.renderer.viewport.zoom_in(1.3)),
             ("BTN_ZOOM_OUT", "ZOOM -", lambda: self.renderer.viewport.zoom_out(1.3)),
             ("BTN_CLEAR", "CLEAR", self.engine.clear),
@@ -185,8 +185,8 @@ class LocalWhiteboardView:
                 border = (255, 80, 80) if is_hovered else (150, 50, 50)
                 lbl = "< BACK"
             elif is_active_tool:
-                bg = (35, 75, 45)
-                border = (57, 255, 20)
+                bg = (18, 55, 85)
+                border = (0, 240, 255)
                 lbl = zone.zone_id.replace("BTN_", "")
             elif is_hovered:
                 bg = (40, 60, 85)
@@ -207,8 +207,8 @@ class LocalWhiteboardView:
         # Notification Banner
         if self.notification and now < self.notification_expiry:
             if self.font_status:
-                notif_txt = self.font_status.render(self.notification, True, (240, 255, 240))
+                notif_txt = self.font_status.render(self.notification, True, (220, 240, 255))
                 nb_rect = pygame.Rect(self.width // 2 - 180, self.height - 50, 360, 38)
-                pygame.draw.rect(surface, (30, 60, 40), nb_rect, border_radius=6)
-                pygame.draw.rect(surface, (57, 255, 20), nb_rect, 1, border_radius=6)
+                pygame.draw.rect(surface, (20, 45, 70), nb_rect, border_radius=6)
+                pygame.draw.rect(surface, (0, 220, 255), nb_rect, 1, border_radius=6)
                 surface.blit(notif_txt, (nb_rect.centerx - notif_txt.get_width() // 2, nb_rect.centery - notif_txt.get_height() // 2))

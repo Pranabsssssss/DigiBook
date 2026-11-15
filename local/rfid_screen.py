@@ -60,7 +60,7 @@ class RFIDScanScreen:
 
         # Main Header
         if self.font_title:
-            title_surf = self.font_title.render("DIGIBOOK", True, (57, 255, 20))
+            title_surf = self.font_title.render("DIGIBOOK", True, (0, 240, 255))
             surface.blit(title_surf, (self.width // 2 - title_surf.get_width() // 2, self.height // 2 - 160))
 
             sub_surf = self.font_sub.render("RFID Digital Whiteboard System", True, (200, 220, 240))
@@ -89,5 +89,5 @@ class RFIDScanScreen:
             if self.simulation_mode:
                 hint_txt = self.font_hint.render("[Simulation Mode: Press 'R' on keyboard to scan default RFID]", True, (100, 120, 140))
             else:
-                hint_txt = self.font_hint.render("📡 RC522 Hardware Active: Hold RFID card against reader (Press 'R' to test)", True, (57, 255, 20))
+                hint_txt = self.font_hint.render("📡 RC522 Hardware Active: Hold RFID card against reader (Press 'R' to test)", True, (0, 240, 255))
             surface.blit(hint_txt, (self.width // 2 - hint_txt.get_width() // 2, self.height - 40))

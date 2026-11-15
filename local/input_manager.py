@@ -154,19 +154,20 @@ class LEDInputManager:
             self.active_zone = None
 
     def render_cursor(self, surface):
-        """Draw a responsive neon green target cursor with dwell ring."""
+        """Draw a responsive electric cyan target cursor with dwell ring (never triggers green optical feedback)."""
         if pygame is None or surface is None or self.raw_screen_pos is None:
             return
 
         cx, cy = self.raw_screen_pos
 
-        # Base reticle
-        pygame.draw.circle(surface, (57, 255, 20), (cx, cy), 14, 2)
+        # Base reticle (Electric Cyan)
+        cyan_color = (0, 220, 255)
+        pygame.draw.circle(surface, cyan_color, (cx, cy), 14, 2)
         pygame.draw.circle(surface, (255, 255, 255), (cx, cy), 3, -1)
-        pygame.draw.line(surface, (57, 255, 20), (cx - 18, cy), (cx - 6, cy), 2)
-        pygame.draw.line(surface, (57, 255, 20), (cx + 6, cy), (cx + 18, cy), 2)
-        pygame.draw.line(surface, (57, 255, 20), (cx, cy - 18), (cx, cy - 6), 2)
-        pygame.draw.line(surface, (57, 255, 20), (cx, cy + 6), (cx, cy + 18), 2)
+        pygame.draw.line(surface, cyan_color, (cx - 18, cy), (cx - 6, cy), 2)
+        pygame.draw.line(surface, cyan_color, (cx + 6, cy), (cx + 18, cy), 2)
+        pygame.draw.line(surface, cyan_color, (cx, cy - 18), (cx, cy - 6), 2)
+        pygame.draw.line(surface, cyan_color, (cx, cy + 6), (cx, cy + 18), 2)
 
         # If hovering with dwell progress, render radial fill ring
         if self.active_zone is not None and self.active_zone.dwell_progress > 0:

@@ -216,6 +216,27 @@ def main():
                             logger.info("Student '%s' recognized! Prompting for 4-digit PIN.", stu.student_name)
                         elif scan_status == "NOT_FOUND":
                             logger.warning("RFID UID '%s' is NOT present in the database! Register student at https://digibook.pranab.space/signup", test_uid)
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    # Direct mouse click support for buttons, cards, and keypad
+                    mx, my = event.pos
+                    if state in (STATE_PIN_CREATE, STATE_PIN_LOGIN) and pin_screen is not None:
+                        for zone in pin_screen.zones:
+                            if zone.contains((mx, my)):
+                                if zone.action_callback:
+                                    zone.action_callback()
+                                break
+                    elif state == STATE_DASHBOARD and dashboard is not None:
+                        for zone in dashboard.zones:
+                            if zone.contains((mx, my)):
+                                if zone.action_callback:
+                                    zone.action_callback()
+                                break
+                    elif state == STATE_WHITEBOARD and whiteboard_view is not None:
+                        for zone in whiteboard_view.zones:
+                            if zone.contains((mx, my)):
+                                if zone.action_callback:
+                                    zone.action_callback()
+                                break
 
             # Non-blocking hardware RFID poll when on RFID wait screen
             if state == STATE_WAIT_RFID:
@@ -246,11 +267,10 @@ def main():
             cam_point, _, _, metadata = detector.detect_debug(frame)
             is_emitting = metadata.get("is_emitting", False)
 
-            # In simulation mode, mouse can provide pointer coordinates
-            if args.simulate and pygame.mouse.get_focused():
+            # If camera does not see active pen, mouse can provide pointer coordinates
+            if cam_point is None and pygame.mouse.get_focused():
                 mx, my = pygame.mouse.get_pos()
                 m_pressed = pygame.mouse.get_pressed()
-                # If left mouse pressed, treat as emitting/clicking
                 if m_pressed[0]:
                     is_emitting = True
                 cam_point = (mx, my)
@@ -260,6 +280,13 @@ def main():
                 rfid_screen.render(screen)
 
             elif state in (STATE_PIN_CREATE, STATE_PIN_LOGIN) and pin_screen is not None:
+                # Mouse hover highlight for keypad buttons
+                if pygame.mouse.get_focused():
+                    mx, my = pygame.mouse.get_pos()
+                    for z in pin_screen.zones:
+                        if z.contains((mx, my)):
+                            z.dwell_progress = max(z.dwell_progress, 0.5)
+
                 event_type, scr_pt, _ = input_manager.update(
                     cam_point=cam_point,
                     is_emitting=is_emitting,
@@ -279,6 +306,13 @@ def main():
                     logger.info("Authentication complete. Switched to dashboard.")
 
             elif state == STATE_DASHBOARD and dashboard is not None:
+                # Mouse hover highlight for cards and buttons
+                if pygame.mouse.get_focused():
+                    mx, my = pygame.mouse.get_pos()
+                    for z in dashboard.zones:
+                        if z.contains((mx, my)):
+                            z.dwell_progress = max(z.dwell_progress, 0.5)
+
                 event_type, scr_pt, _ = input_manager.update(
                     cam_point=cam_point,
                     is_emitting=is_emitting,
@@ -289,6 +323,13 @@ def main():
                 input_manager.render_cursor(screen)
 
             elif state == STATE_WHITEBOARD and whiteboard_view is not None:
+                # Mouse hover highlight for toolbar buttons
+                if pygame.mouse.get_focused():
+                    mx, my = pygame.mouse.get_pos()
+                    for z in whiteboard_view.zones:
+                        if z.contains((mx, my)):
+                            z.dwell_progress = max(z.dwell_progress, 0.5)
+
                 event_type, scr_pt, _ = input_manager.update(
                     cam_point=cam_point,
                     is_emitting=is_emitting,
@@ -296,10 +337,20 @@ def main():
                     is_drawing_mode=True,
                 )
 
-                if scr_pt:
-                    whiteboard_view.handle_screen_point(scr_pt[0], scr_pt[1], is_emitting=is_emitting)
-                else:
-                    whiteboard_view.handle_screen_point(0, 0, is_emitting=False)
+                # Mouse drawing support: left-click and drag on canvas
+                mouse_drawing = False
+                if pygame.mouse.get_pressed()[0]:
+                    mx, my = pygame.mouse.get_pos()
+                    over_toolbar = any(z.contains((mx, my)) for z in whiteboard_view.zones)
+                    if not over_toolbar:
+                        mouse_drawing = True
+                        whiteboard_view.handle_screen_point(mx, my, is_emitting=True)
+
+                if not mouse_drawing:
+                    if scr_pt:
+                        whiteboard_view.handle_screen_point(scr_pt[0], scr_pt[1], is_emitting=is_emitting)
+                    else:
+                        whiteboard_view.handle_screen_point(0, 0, is_emitting=False)
 
                 whiteboard_view.update_periodic(db=db)
                 whiteboard_view.render(screen)
