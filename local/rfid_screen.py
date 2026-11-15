@@ -14,9 +14,10 @@ class RFIDScanScreen:
     Local Raspberry Pi screen waiting for student RFID card scan.
     """
 
-    def __init__(self, screen_width: int, screen_height: int):
+    def __init__(self, screen_width: int, screen_height: int, simulation_mode: bool = False):
         self.width = screen_width
         self.height = screen_height
+        self.simulation_mode = simulation_mode
 
         self.error_message: Optional[str] = None
         self.error_expiry: float = 0.0
@@ -83,7 +84,10 @@ class RFIDScanScreen:
                 err_surf = self.font_msg.render(self.error_message, True, (255, 100, 100))
                 surface.blit(err_surf, (err_box.centerx - err_surf.get_width() // 2, err_box.centery - err_surf.get_height() // 2))
 
-        # Simulation mode hint
+        # Hardware vs Simulation mode status footer
         if self.font_hint:
-            hint_txt = self.font_hint.render("[Simulation Mode: Press 'R' on keyboard to scan default RFID]", True, (100, 120, 140))
+            if self.simulation_mode:
+                hint_txt = self.font_hint.render("[Simulation Mode: Press 'R' on keyboard to scan default RFID]", True, (100, 120, 140))
+            else:
+                hint_txt = self.font_hint.render("📡 RC522 Hardware Active: Hold RFID card against reader (Press 'R' to test)", True, (57, 255, 20))
             surface.blit(hint_txt, (self.width // 2 - hint_txt.get_width() // 2, self.height - 40))

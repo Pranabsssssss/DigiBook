@@ -121,7 +121,7 @@ def main():
     current_session_token = None
     current_whiteboard = None
 
-    rfid_screen = RFIDScanScreen(width, height)
+    rfid_screen = RFIDScanScreen(width, height, simulation_mode=args.simulate)
     pin_screen = None
     dashboard = None
     whiteboard_view = None
@@ -172,21 +172,28 @@ def main():
                             on_logout()
                         else:
                             running = False
-                    elif event.key == pygame.K_r and args.simulate:
-                        # Simulation keyboard shortcut: trigger RFID scan of default test card
-                        card_res = rfid_reader.wait_for_card(timeout=0.01)
-                        if card_res:
-                            uid, text = card_res
-                            logger.info("[Sim] Scanned card: %s", uid)
-                            scan_status, stu = rfid_screen.process_card_scan(uid, db=db)
-                            if scan_status == "NEEDS_PIN_CREATION":
-                                current_student = stu
-                                pin_screen = PINEntryScreen(width, height, stu, mode=PINEntryScreen.MODE_CREATE)
-                                state = STATE_PIN_CREATE
-                            elif scan_status == "NEEDS_PIN_ENTRY":
-                                current_student = stu
-                                pin_screen = PINEntryScreen(width, height, stu, mode=PINEntryScreen.MODE_LOGIN)
-                                state = STATE_PIN_LOGIN
+                    elif event.key == pygame.K_r:
+                        # Instant card trigger (works in both simulation and hardware mode)
+                        test_uid = "1234567890"
+                        if hasattr(rfid_reader, "wait_for_card"):
+                            card_res = rfid_reader.wait_for_card(timeout=0.01)
+                            if card_res:
+                                test_uid = card_res[0]
+                        logger.info("['R' Key Pressed] Triggering RFID scan for UID: %s", test_uid)
+                        scan_status, stu = rfid_screen.process_card_scan(test_uid, db=db)
+                        logger.info("RFID Scanned: UID=%s -> Status: %s", test_uid, scan_status)
+                        if scan_status == "NEEDS_PIN_CREATION":
+                            current_student = stu
+                            pin_screen = PINEntryScreen(width, height, stu, mode=PINEntryScreen.MODE_CREATE)
+                            state = STATE_PIN_CREATE
+                            logger.info("Student '%s' recognized! Starting first-time 4-digit PIN setup.", stu.student_name)
+                        elif scan_status == "NEEDS_PIN_ENTRY":
+                            current_student = stu
+                            pin_screen = PINEntryScreen(width, height, stu, mode=PINEntryScreen.MODE_LOGIN)
+                            state = STATE_PIN_LOGIN
+                            logger.info("Student '%s' recognized! Prompting for 4-digit PIN.", stu.student_name)
+                        elif scan_status == "NOT_FOUND":
+                            logger.warning("RFID UID '%s' is NOT present in the database! Register student at https://digibook.pranab.space/signup", test_uid)
 
             # Non-blocking hardware RFID poll when on RFID wait screen
             if state == STATE_WAIT_RFID:

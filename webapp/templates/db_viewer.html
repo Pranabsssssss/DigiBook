@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}Database Studio — DigiBook{% endblock %}
+
+{% block content %}
+<div class="db-viewer-container" style="max-width: 1400px; margin: 0 auto; padding: 20px;">
+    {% if not authenticated %}
+        <!-- PIN Authentication Form -->
+        <div class="auth-card-container">
+            <div class="card auth-card" style="max-width: 420px; margin: 60px auto;">
+                <div class="card-header" style="text-align: center; margin-bottom: 20px;">
+                    <span style="font-size: 2.5rem;">🗄️</span>
+                    <h2 style="margin-top: 10px;">Database Studio</h2>
+                    <p style="color: var(--text-muted); font-size: 0.9rem;">Protected Diagnostic Interface</p>
+                </div>
+
+                <form method="POST" action="{{ url_for('views.db_viewer') }}" class="auth-form">
+                    <div class="form-group">
+                        <label for="password">Access PIN / Password</label>
+                        <input type="password" id="password" name="password" required autofocus placeholder="Enter 4-digit PIN" class="form-control text-center" style="font-size: 1.4rem; letter-spacing: 4px;">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block btn-lg" style="margin-top: 15px;">Unlock Database</button>
+                </form>
+            </div>
+        </div>
+    {% else %}
+        <!-- Full Database Dashboard & Schema Inspector -->
+        <div class="db-header-bar" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 15px;">
+            <div>
+                <h1 style="font-size: 1.8rem; display: flex; align-items: center; gap: 10px;">
+                    <span>🗄️</span> MariaDB Schema &amp; Data Studio
+                </h1>
+                <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 4px;">
+                    Database: <strong style="color: var(--primary-color);">digibook</strong> · Host: <strong>{{ db_host }}:3306</strong> · Status: <span style="color: #39FF14;">● Connected</span>
+                </p>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <a href="{{ url_for('views.db_viewer', table=active_table) }}" class="btn btn-outline btn-sm">🔄 Refresh</a>
+                <a href="{{ url_for('views.db_viewer', logout=1) }}" class="btn btn-secondary btn-sm">Lock Studio</a>
+            </div>
+        </div>
+
+        <!-- Metric Badges -->
+        <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 25px;">
+            {% for tbl, count in table_counts.items() %}
+            <a href="{{ url_for('views.db_viewer', table=tbl) }}" style="text-decoration: none; color: inherit;">
+                <div class="card" style="padding: 16px; border-left: 4px solid {% if tbl == active_table %}var(--primary-color){% else %}var(--border-color){% endif %}; transition: transform 0.15s ease;">
+                    <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">{{ tbl }}</div>
+                    <div style="font-size: 1.8rem; font-weight: 700; color: #fff; margin-top: 4px;">{{ count }} <span style="font-size: 0.9rem; font-weight: normal; color: var(--text-muted);">rows</span></div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+
+        <!-- Table Selector Tabs -->
+        <div class="table-tabs" style="display: flex; gap: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; margin-bottom: 20px; overflow-x: auto;">
+            {% for tbl in tables %}
+                <a href="{{ url_for('views.db_viewer', table=tbl) }}" 
+                   class="btn {% if tbl == active_table %}btn-primary{% else %}btn-outline{% endif %} btn-sm" style="white-space: nowrap;">
+                   📄 {{ tbl }} ({{ table_counts.get(tbl, 0) }})
+                </a>
+            {% endfor %}
+        </div>
+
+        <!-- Section 1: Table Schema -->
+        <div class="card" style="margin-bottom: 25px; padding: 20px;">
+            <h3 style="margin-bottom: 15px; font-size: 1.2rem; color: var(--accent-cyan); display: flex; align-items: center; gap: 8px;">
+                <span>📐</span> Schema Architecture for <code style="color: #fff; background: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 4px;">{{ active_table }}</code>
+            </h3>
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid var(--border-color); text-align: left; color: var(--text-muted);">
+                            <th style="padding: 10px;">Field</th>
+                            <th style="padding: 10px;">Type</th>
+                            <th style="padding: 10px;">Null</th>
+                            <th style="padding: 10px;">Key</th>
+                            <th style="padding: 10px;">Default</th>
+                            <th style="padding: 10px;">Extra</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for col in schema %}
+                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                            <td style="padding: 10px; font-weight: 600; color: #fff;">{{ col['Field'] }}</td>
+                            <td style="padding: 10px; font-family: monospace; color: #39FF14;">{{ col['Type'] }}</td>
+                            <td style="padding: 10px; color: var(--text-muted);">{{ col['Null'] }}</td>
+                            <td style="padding: 10px;">
+                                {% if col['Key'] == 'PRI' %}
+                                    <span style="background: rgba(255, 193, 7, 0.2); color: #ffc107; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold;">PRIMARY</span>
+                                {% elif col['Key'] == 'UNI' %}
+                                    <span style="background: rgba(0, 240, 255, 0.2); color: var(--accent-cyan); padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold;">UNIQUE</span>
+                                {% elif col['Key'] == 'MUL' %}
+                                    <span style="background: rgba(150, 150, 150, 0.2); color: #ccc; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">INDEX</span>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td style="padding: 10px; font-family: monospace; color: var(--text-muted);">{{ col['Default'] if col['Default'] is not none else 'NULL' }}</td>
+                            <td style="padding: 10px; font-size: 0.8rem; color: var(--text-muted);">{{ col['Extra'] }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Section 2: Table Rows Data -->
+        <div class="card" style="padding: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                <h3 style="font-size: 1.2rem; color: #fff; display: flex; align-items: center; gap: 8px;">
+                    <span>📊</span> Stored Records in <code style="color: #fff; background: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 4px;">{{ active_table }}</code> (Latest {{ rows|length }})
+                </h3>
+                <span style="font-size: 0.85rem; color: var(--text-muted);">Auto-ordered by ID descending</span>
+            </div>
+
+            {% if rows %}
+            <div style="overflow-x: auto; max-height: 600px;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; white-space: nowrap;">
+                    <thead style="position: sticky; top: 0; background: var(--bg-card); z-index: 1;">
+                        <tr style="border-bottom: 2px solid var(--border-color); text-align: left; color: var(--text-muted);">
+                            {% for col in schema %}
+                            <th style="padding: 10px 12px; background: var(--bg-card);">{{ col['Field'] }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in rows %}
+                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                            {% for col in schema %}
+                                {% set val = row.get(col['Field']) %}
+                                <td style="padding: 10px 12px; max-width: 320px; overflow: hidden; text-overflow: ellipsis;">
+                                    {% if val is none %}
+                                        <span style="color: #64748b; font-style: italic;">NULL</span>
+                                    {% elif col['Field'] in ('pin_hash',) %}
+                                        <span style="color: var(--text-muted); font-family: monospace;">•••••••• (bcrypt hash)</span>
+                                    {% elif col['Field'] in ('thumbnail_b64',) and val %}
+                                        <span style="color: var(--accent-cyan);">[Base64 Image {{ val|length }} chars]</span>
+                                    {% elif col['Field'] in ('points_json',) and val %}
+                                        <span style="color: var(--accent-cyan); font-family: monospace;">{{ val[:40] }}...</span>
+                                    {% elif col['Field'] in ('created_at', 'updated_at', 'last_login_at', 'expires_at') %}
+                                        <span style="color: #cbd5e1; font-family: monospace;">{{ val }}</span>
+                                    {% elif col['Field'] in ('rfid_key',) %}
+                                        <span style="color: #39FF14; font-weight: bold; font-family: monospace;">{{ val }}</span>
+                                    {% elif col['Field'] in ('email',) %}
+                                        <span style="color: var(--accent-cyan);">{{ val }}</span>
+                                    {% elif col['Field'] in ('pin_set', 'is_active', 'is_deleted') %}
+                                        {% if val == 1 or val == true %}
+                                            <span style="color: #39FF14; font-weight: bold;">TRUE</span>
+                                        {% else %}
+                                            <span style="color: #f87171;">FALSE</span>
+                                        {% endif %}
+                                    {% else %}
+                                        {{ val }}
+                                    {% endif %}
+                                </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div style="text-align: center; padding: 40px; color: var(--text-muted);">
+                <span style="font-size: 2rem;">📭</span>
+                <p style="margin-top: 10px;">No records found in table <strong>{{ active_table }}</strong>.</p>
+            </div>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

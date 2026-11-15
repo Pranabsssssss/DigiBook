@@ -117,3 +117,67 @@ def logout():
     logout_user()
     flash("You have been signed out.", "info")
     return redirect(url_for("views.signin"))
+
+
+@views_bp.route("/db", methods=["GET", "POST"])
+def db_viewer():
+    """
+    Diagnostic Database Studio for inspecting tables, schemas, and stored rows.
+    Protected by password '8520'.
+    """
+    from flask import session
+    from config.settings import DB_HOST
+
+    # Handle explicit logout / lock
+    if request.args.get("logout"):
+        session.pop("db_studio_auth", None)
+        return redirect(url_for("views.db_viewer"))
+
+    # Check password via POST or query parameter or existing session
+    password = request.form.get("password") or request.args.get("pin")
+    if password:
+        if str(password).strip() == "8520":
+            session["db_studio_auth"] = True
+            flash("Database Studio unlocked successfully.", "success")
+            return redirect(url_for("views.db_viewer"))
+        else:
+            flash("Invalid PIN. Access denied.", "danger")
+
+    authenticated = session.get("db_studio_auth", False)
+    if not authenticated:
+        return render_template("db_viewer.html", authenticated=False)
+
+    db = getattr(request, "_db", None) or get_db()
+    available_tables = ["students", "whiteboards", "whiteboard_strokes", "sessions", "audit_log"]
+
+    # Table counts
+    table_counts = {}
+    for tbl in available_tables:
+        try:
+            cnt_row = db.execute_one(f"SELECT COUNT(*) as cnt FROM `{tbl}`")
+            table_counts[tbl] = cnt_row["cnt"] if cnt_row else 0
+        except Exception:
+            table_counts[tbl] = 0
+
+    active_table = request.args.get("table", "students")
+    if active_table not in available_tables:
+        active_table = "students"
+
+    schema = []
+    rows = []
+    try:
+        schema = db.execute(f"DESCRIBE `{active_table}`")
+        rows = db.execute(f"SELECT * FROM `{active_table}` ORDER BY id DESC LIMIT 50")
+    except Exception as e:
+        flash(f"Error querying table {active_table}: {e}", "danger")
+
+    return render_template(
+        "db_viewer.html",
+        authenticated=True,
+        db_host=DB_HOST,
+        tables=available_tables,
+        table_counts=table_counts,
+        active_table=active_table,
+        schema=schema,
+        rows=rows,
+    )
