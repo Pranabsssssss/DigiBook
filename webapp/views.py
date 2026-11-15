@@ -36,7 +36,6 @@ def signup():
         rfid_key = request.form.get("rfid_key", "").strip()
         class_name = request.form.get("class", "").strip()
         email = request.form.get("email", "").strip().lower()
-        pin = request.form.get("pin", "").strip()
 
         db = getattr(request, "_db", None) or get_db()
 
@@ -47,13 +46,14 @@ def signup():
                 rfid_key=rfid_key,
                 class_name=class_name,
                 email=email,
-                pin=pin if pin else None,
+                pin=None,  # PIN is exclusively created at the physical whiteboard
                 db=db,
             )
-            web_user = WebUser(student)
-            login_user(web_user)
-            flash("Registration successful! Welcome to DigiBook.", "success")
-            return redirect(url_for("views.dashboard"))
+            flash(
+                f"Registration successful for {student.student_name}! Please scan your RFID card on the whiteboard to set your 4-digit PIN before signing in.",
+                "success"
+            )
+            return redirect(url_for("views.signin"))
         except (DuplicateFieldError, ValueError) as e:
             flash(str(e), "danger")
         except Exception as e:

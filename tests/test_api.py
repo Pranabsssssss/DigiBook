@@ -26,22 +26,41 @@ def client(app_and_mock_db):
 
 def test_api_register_and_login(client):
     """Test student registration and subsequent email+PIN login via API."""
-    # 1. Register student
-    reg_payload = {
+    # 1. Attempt registration with PIN (must be rejected)
+    res_rejected = client.post("/api/v1/auth/register", json={
         "student_name": "Robin Sparkles",
         "student_id": "STU_ROBIN",
         "rfid_key": "RFID_ROBIN_99",
         "class": "Music-101",
         "email": "robin@school.edu",
         "pin": "7788",
+    })
+    assert res_rejected.status_code == 400
+    assert "PIN cannot be set during registration" in res_rejected.get_json()["error"]
+
+    # 2. Register student properly without PIN
+    reg_payload = {
+        "student_name": "Robin Sparkles",
+        "student_id": "STU_ROBIN",
+        "rfid_key": "RFID_ROBIN_99",
+        "class": "Music-101",
+        "email": "robin@school.edu",
     }
     res = client.post("/api/v1/auth/register", json=reg_payload)
     assert res.status_code == 201
     data = res.get_json()
     assert data["success"] is True
     assert data["student"]["student_name"] == "Robin Sparkles"
+    student_id = data["student"]["id"]
 
-    # 2. Login with correct email and PIN
+    # 3. Setting PIN at whiteboard
+    res_set_pin = client.post("/api/v1/auth/set-pin", json={
+        "student_id": student_id,
+        "pin": "7788"
+    })
+    assert res_set_pin.status_code == 200
+
+    # 4. Login with correct email and newly established PIN
     login_payload = {
         "email": "robin@school.edu",
         "pin": "7788",
@@ -54,7 +73,7 @@ def test_api_register_and_login(client):
     token = login_data["session_token"]
     assert len(token) == 64
 
-    # 3. Login with wrong PIN
+    # 5. Login with wrong PIN
     res_wrong = client.post("/api/v1/auth/login", json={"email": "robin@school.edu", "pin": "0000"})
     assert res_wrong.status_code == 401
 
@@ -98,7 +117,7 @@ def test_api_whiteboard_crud(client, app_and_mock_db):
     _, mock_db = app_and_mock_db
 
     # Register & Login
-    client.post(
+    reg_res = client.post(
         "/api/v1/auth/register",
         json={
             "student_name": "WB Tester",
@@ -106,9 +125,12 @@ def test_api_whiteboard_crud(client, app_and_mock_db):
             "rfid_key": "RFID_WB",
             "class": "Science",
             "email": "wb@school.edu",
-            "pin": "1234",
         },
     )
+    assert reg_res.status_code == 201
+    wb_student_id = reg_res.get_json()["student"]["id"]
+    client.post("/api/v1/auth/set-pin", json={"student_id": wb_student_id, "pin": "1234"})
+
     login_res = client.post("/api/v1/auth/login", json={"email": "wb@school.edu", "pin": "1234"})
     token = login_res.get_json()["session_token"]
     headers = {"Authorization": f"Bearer {token}"}

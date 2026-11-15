@@ -87,7 +87,13 @@ def api_register():
     rfid_key = data.get("rfid_key", "")
     class_name = data.get("class", "")
     email = data.get("email", "")
-    pin = data.get("pin")  # Optional initial 4-digit PIN
+
+    # Security policy: PIN cannot be set at signup; it must be created at the physical whiteboard
+    if data.get("pin"):
+        return jsonify({
+            "success": False,
+            "error": "PIN cannot be set during registration. PIN must be created at the physical whiteboard upon first RFID scan."
+        }), 400
 
     try:
         student = register_student(
@@ -96,12 +102,12 @@ def api_register():
             rfid_key=rfid_key,
             class_name=class_name,
             email=email,
-            pin=pin,
+            pin=None,
             db=db,
         )
         return jsonify({
             "success": True,
-            "message": "Student registered successfully.",
+            "message": "Student registered successfully. PIN must be created at the physical whiteboard.",
             "student": student.to_dict(safe=True)
         }), 201
     except DuplicateFieldError as e:
