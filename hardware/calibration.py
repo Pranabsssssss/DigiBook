@@ -18,9 +18,9 @@ from config import (
     get_calibration_points, get_display_resolution
 )
 try:
-    from hardware.detector import IRDetector
+    from hardware.detector import GreenLEDDetector
 except ImportError:
-    from detector import IRDetector
+    GreenLEDDetector = None
 
 
 def calibration_exists() -> bool:
@@ -204,7 +204,7 @@ def run_calibration(camera, screen=None) -> np.ndarray:
         if not pygame.get_init():
             pygame.init()
         screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
-        pygame.display.set_caption("Smart Notebook - Display Calibration")
+        pygame.display.set_caption("DigiBook — Display Calibration")
         owns_screen = True
 
     sw = screen.get_width()
@@ -277,7 +277,7 @@ def run_calibration(camera, screen=None) -> np.ndarray:
             # Render Selection Screen
             screen.fill((14, 17, 24))
 
-            title_surf = font_title.render("SMART NOTEBOOK — DISPLAY CALIBRATION", True, (40, 240, 180))
+            title_surf = font_title.render("DIGIBOOK — DISPLAY CALIBRATION", True, (40, 240, 180))
             sub_surf = font_sub.render("Choose how you want to calibrate your monitor display boundaries:", True, (200, 215, 235))
             screen.blit(title_surf, (sw // 2 - title_surf.get_width() // 2, card_y - 95))
             screen.blit(sub_surf, (sw // 2 - sub_surf.get_width() // 2, card_y - 55))

@@ -45,6 +45,7 @@ def parse_args():
     parser.add_argument("-d", "--device", type=int, default=CAMERA_DEVICE_INDEX, help="USB camera device index (default: 0)")
     parser.add_argument("-s", "--simulate", action="store_true", default=SIMULATION_MODE, help="Run in simulation mode")
     parser.add_argument("-w", "--windowed", action="store_true", help="Run windowed instead of fullscreen")
+    parser.add_argument("--skip-calibration", action="store_true", help="Skip display calibration studio on startup")
     return parser.parse_args()
 
 
@@ -85,18 +86,31 @@ def main():
         camera = SimulatedCamera()
         camera.start()
 
-    # 4. Load or Initialize Coordinate Transformer
+    # 4. Interactive Display Calibration Studio
+    # First calibrate display boundaries to camera view (Auto DocScanner or Manual Pins)
     homography_matrix = None
-    if calibration_exists():
+    if not args.skip_calibration:
+        logger.info("Launching Display Calibration Studio...")
+        try:
+            from hardware.calibration import run_calibration
+            homography_matrix = run_calibration(camera, screen=screen)
+            logger.info("Display calibration completed successfully.")
+        except KeyboardInterrupt:
+            logger.info("Calibration skipped by user, loading saved/default bounds.")
+        except Exception as e:
+            logger.warning("Calibration studio note (%s); loading saved/default bounds.", e)
+
+    if homography_matrix is None and calibration_exists():
         try:
             homography_matrix = load_calibration()
-            logger.info("Loaded display calibration data.")
+            logger.info("Loaded previously saved display calibration data.")
         except Exception:
             pass
 
     if homography_matrix is None:
         # Fallback to linear scale 1:1
         homography_matrix = np.eye(3, dtype=np.float64)
+        logger.info("Using 1:1 default coordinate mapping.")
 
     transformer = CoordinateTransformer(homography_matrix, screen_width=width, screen_height=height)
     input_manager = LEDInputManager(transformer=transformer)
