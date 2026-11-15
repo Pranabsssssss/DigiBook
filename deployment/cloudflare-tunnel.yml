@@ -1,0 +1,17 @@
+# Cloudflare Tunnel Configuration for DigiBook
+# Domain: digibook.pranav.space
+# Path on Raspberry Pi: /etc/cloudflared/config.yml or ~/.cloudflared/config.yml
+
+tunnel: <YOUR-CLOUDFLARE-TUNNEL-UUID>
+credentials-file: /etc/cloudflared/<YOUR-CLOUDFLARE-TUNNEL-UUID>.json
+
+ingress:
+  # Map DigiBook subdomain to local Gunicorn HTTP server
+  - hostname: digibook.pranav.space
+    service: http://127.0.0.1:5000
+    originRequest:
+      connectTimeout: 10s
+      noTLSVerify: false
+
+  # Catch-all rule (required by Cloudflare)
+  - service: http_status:404

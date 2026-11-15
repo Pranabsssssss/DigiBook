@@ -1,0 +1,31 @@
+# Core Computer Vision & Display
+opencv-python-headless>=4.8.0
+numpy>=1.24.0
+pygame>=2.5.0
+
+# Database
+pymysql>=1.1.0
+cryptography>=41.0.0
+
+# Web Application
+flask>=3.0.0
+flask-login>=0.6.0
+flask-wtf>=1.2.0
+pyjwt>=2.8.0
+gunicorn>=21.2.0
+
+# Security
+bcrypt>=4.1.0
+
+# Utilities
+python-dotenv>=1.0.0
+psutil>=5.9.0
+
+# Testing
+pytest>=7.4.0
+
+# Raspberry Pi Hardware Specific (installed on Pi via apt / pip)
+# Note: On Raspberry Pi OS, picamera2 and libcamera come pre-installed.
+# mfrc522>=0.0.7
+# RPi.GPIO>=0.7.1
+# spidev>=3.6

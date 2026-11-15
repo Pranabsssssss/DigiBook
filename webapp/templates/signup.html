@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Register Student — DigiBook{% endblock %}
+
+{% block content %}
+<div class="auth-card-container">
+    <div class="card auth-card">
+        <div class="card-header">
+            <h2>Student Registration</h2>
+            <p>Enroll a new student and associate their RFID card.</p>
+        </div>
+
+        <form method="POST" action="{{ url_for('views.signup') }}" class="auth-form">
+            <div class="form-group">
+                <label for="student_name">Student Full Name *</label>
+                <input type="text" id="student_name" name="student_name" required placeholder="e.g. Alex Rivera" class="form-control">
+            </div>
+
+            <div class="form-row">
+                <div class="form-group col-half">
+                    <label for="student_id">Student ID *</label>
+                    <input type="text" id="student_id" name="student_id" required placeholder="e.g. STU2026042" class="form-control">
+                </div>
+                <div class="form-group col-half">
+                    <label for="class">Class / Grade *</label>
+                    <input type="text" id="class" name="class" required placeholder="e.g. Grade 10-A" class="form-control">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="rfid_key">RFID Card UID / Key *</label>
+                <input type="text" id="rfid_key" name="rfid_key" required placeholder="e.g. 1234567890" class="form-control">
+                <small class="form-help">Scan or enter the unique identifier of the RFID card.</small>
+            </div>
+
+            <div class="form-group">
+                <label for="email">Email Address *</label>
+                <input type="email" id="email" name="email" required placeholder="student@example.com" class="form-control">
+            </div>
+
+            <div class="form-group">
+                <label for="pin">Initial 4-Digit PIN (Optional)</label>
+                <input type="password" id="pin" name="pin" maxlength="4" pattern="\d{4}" placeholder="4 digits (or set on physical whiteboard)" class="form-control">
+                <small class="form-help">Leave blank to let student create their PIN upon first physical RFID scan.</small>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block btn-lg">Complete Registration</button>
+
+            <div class="auth-footer-link">
+                <span>Already registered?</span>
+                <a href="{{ url_for('views.signin') }}">Sign in with email</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

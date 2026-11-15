@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}My Whiteboards — DigiBook{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <div>
+            <h1>Personal Whiteboards</h1>
+            <p class="text-muted">Whiteboards saved on the Raspberry Pi or created remotely.</p>
+        </div>
+        <button id="btnCreateNew" class="btn btn-primary" onclick="createNewWhiteboard()">+ New Whiteboard</button>
+    </div>
+
+    <div class="cards-grid">
+        {% for wb in whiteboards %}
+            <div class="wb-card" onclick="window.location.href='{{ url_for('views.whiteboard', wb_id=wb.id) }}'">
+                <div class="wb-thumb-wrapper">
+                    {% if wb.thumbnail_b64 %}
+                        <img src="{{ wb.thumbnail_b64 }}" alt="{{ wb.title }}" class="wb-thumb-img">
+                    {% else %}
+                        <div class="wb-thumb-placeholder">
+                            <span>Canvas Empty</span>
+                        </div>
+                    {% endif %}
+                </div>
+                <div class="wb-card-info">
+                    <h3 class="wb-title">{{ wb.title }}</h3>
+                    <div class="wb-meta">
+                        <span>{{ wb.updated_at.strftime('%b %d, %Y · %H:%M') if wb.updated_at else 'Recently' }}</span>
+                        <button class="btn-delete-card" onclick="deleteWhiteboard(event, {{ wb.id }})" title="Delete whiteboard">×</button>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+
+        <!-- Dedicated '+' Card: Always Present -->
+        <div class="wb-card wb-card-plus" onclick="createNewWhiteboard()" title="Create New Whiteboard">
+            <div class="plus-icon-container">
+                <span class="plus-symbol">+</span>
+                <span class="plus-label">New Whiteboard</span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,20 @@
+[Unit]
+Description=DigiBook Web Application (Gunicorn)
+After=network.target mariadb.service mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/DigiBook
+Environment="PATH=/home/pi/DigiBook/venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/home/pi/DigiBook/.env
+ExecStart=/home/pi/DigiBook/venv/bin/gunicorn -c deployment/gunicorn.conf.py "webapp.app:create_app()"
+Restart=always
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

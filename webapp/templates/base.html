@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}DigiBook — RFID Digital Whiteboard{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <header class="app-header">
+        <div class="header-container">
+            <a href="{{ url_for('views.index') }}" class="brand-logo">
+                <span class="logo-accent">Digi</span>Book
+            </a>
+            <nav class="header-nav">
+                {% if current_user.is_authenticated %}
+                    <span class="nav-user">{{ current_user.student_name }} ({{ current_user.class_name }})</span>
+                    <a href="{{ url_for('views.dashboard') }}" class="nav-link">Dashboard</a>
+                    <a href="{{ url_for('views.logout') }}" class="btn btn-outline btn-sm">Sign Out</a>
+                {% else %}
+                    <a href="{{ url_for('views.signin') }}" class="nav-link">Sign In</a>
+                    <a href="{{ url_for('views.signup') }}" class="btn btn-primary btn-sm">Register</a>
+                {% endif %}
+            </nav>
+        </div>
+    </header>
+
+    <main class="main-container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-container">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% if error_title %}
+            <div class="error-page card">
+                <h2>{{ error_title }}</h2>
+                <p>{{ error_message }}</p>
+                <a href="{{ url_for('views.index') }}" class="btn btn-primary">Return to Safety</a>
+            </div>
+        {% else %}
+            {% block content %}{% endblock %}
+        {% endif %}
+    </main>
+
+    <footer class="app-footer">
+        <p>&copy; 2026 DigiBook · Raspberry Pi RFID Digital Whiteboard</p>
+    </footer>
+
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

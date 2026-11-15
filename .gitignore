@@ -1,0 +1,46 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Environment Variables & Secrets
+.env
+*.pem
+*.key
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Operating System files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# DigiBook Runtime Data & Logs
+calibration_data/
+saves/
+logs/*.log
+dataset_captured/
+test_frame*.png
+test_*.png
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}{{ whiteboard.title }} — DigiBook Whiteboard{% endblock %}
+
+{% block extra_head %}
+<meta name="whiteboard-id" content="{{ whiteboard.id }}">
+{% endblock %}
+
+{% block content %}
+<div class="wb-editor-container">
+    <div class="wb-editor-toolbar">
+        <div class="toolbar-group">
+            <a href="{{ url_for('views.dashboard') }}" class="btn btn-outline btn-sm">&larr; Dashboard</a>
+            <input type="text" id="wbTitleInput" value="{{ whiteboard.title }}" class="wb-title-edit" onchange="saveWhiteboardTitle()">
+        </div>
+
+        <div class="toolbar-group">
+            <!-- Tool selection -->
+            <button id="toolPen" class="btn btn-tool active" onclick="setTool('pen')">Pen</button>
+            <button id="toolEraser" class="btn btn-tool" onclick="setTool('eraser')">Eraser</button>
+
+            <!-- Color Palette -->
+            <div class="color-palette">
+                <span class="color-dot active" style="background-color: #FFFFFF;" onclick="setColor('#FFFFFF', this)"></span>
+                <span class="color-dot" style="background-color: #39FF14;" onclick="setColor('#39FF14', this)"></span>
+                <span class="color-dot" style="background-color: #00F0FF;" onclick="setColor('#00F0FF', this)"></span>
+                <span class="color-dot" style="background-color: #FFE600;" onclick="setColor('#FFE600', this)"></span>
+                <span class="color-dot" style="background-color: #FF3366;" onclick="setColor('#FF3366', this)"></span>
+            </div>
+
+            <!-- Zoom -->
+            <button class="btn btn-sm btn-icon" onclick="zoomIn()" title="Zoom In">+</button>
+            <button class="btn btn-sm btn-icon" onclick="zoomOut()" title="Zoom Out">&minus;</button>
+            <button class="btn btn-sm btn-icon" onclick="resetZoom()" title="Reset Zoom">100%</button>
+        </div>
+
+        <div class="toolbar-group">
+            <button class="btn btn-outline btn-sm" onclick="clearCanvas()">Clear</button>
+            <button id="btnSave" class="btn btn-primary btn-sm" onclick="saveWhiteboard()">Save Changes</button>
+            <span id="saveStatus" class="save-status-text">All changes saved</span>
+        </div>
+    </div>
+
+    <div class="canvas-viewport" id="canvasViewport">
+        <canvas id="whiteboardCanvas" width="1920" height="1080"></canvas>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/whiteboard.js') }}"></script>
+{% endblock %}
