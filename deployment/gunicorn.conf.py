@@ -18,10 +18,10 @@ keepalive = 5
 max_requests = 1000
 max_requests_jitter = 50
 
-# Logging
-accesslog = "/home/pi/DigiBook/logs/access.log"
-errorlog = "/home/pi/DigiBook/logs/error.log"
-loglevel = "warning"
+# Logging (to stdout/stderr for systemd journal capture)
+accesslog = "-"
+errorlog = "-"
+loglevel = "info"
 
 # Process naming
 proc_name = "digibook_web"

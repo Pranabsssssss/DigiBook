@@ -24,6 +24,7 @@ class RFIDReader:
     def __init__(self, simulation: bool = False):
         self.simulation = simulation
         self.reader = None
+        self._sim_instance = None
 
         if not self.simulation:
             if not RPI_RFID_AVAILABLE:
@@ -88,9 +89,10 @@ class RFIDReader:
 
     def _simulated_wait_for_card(self, timeout: Optional[float] = None) -> Optional[Tuple[str, str]]:
         """Fallback simulation prompt if accessed directly."""
-        from hardware.simulation import SimulatedRFID
-        sim = SimulatedRFID()
-        return sim.wait_for_card(timeout=timeout)
+        if self._sim_instance is None:
+            from hardware.simulation import SimulatedRFID
+            self._sim_instance = SimulatedRFID()
+        return self._sim_instance.wait_for_card(timeout=timeout)
 
     def cleanup(self):
         """Clean up GPIO resources."""

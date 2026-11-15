@@ -1,4 +1,6 @@
 import logging
+import threading
+from typing import Optional
 from functools import wraps
 from flask import Blueprint, request, jsonify
 from flask_login import current_user
@@ -294,3 +296,66 @@ def api_get_thumbnail(student: Student, wb_id: int):
         "whiteboard_id": wb.id,
         "thumbnail_b64": wb.thumbnail_b64 or ""
     }), 200
+
+
+# === Hardware Integration Routes ===
+
+_rfid_reader_instance = None
+_rfid_lock = threading.Lock()
+
+
+def get_rfid_reader_instance():
+    """Singleton getter for the hardware RFID reader with thread-safety."""
+    global _rfid_reader_instance
+    with _rfid_lock:
+        if _rfid_reader_instance is None:
+            from hardware.rfid import RFIDReader
+            _rfid_reader_instance = RFIDReader()
+        return _rfid_reader_instance
+
+
+@api_bp.route("/hardware/rfid-scan", methods=["GET"])
+def api_hardware_rfid_scan():
+    """
+    Poll the connected RC522 RFID reader on Raspberry Pi for an RFID card.
+    Used by the registration page to automatically populate the RFID field
+    when a student taps their card on the physical reader.
+    Query parameters:
+        timeout: float in seconds (default 1.5, min 0.2, max 3.0)
+    Returns:
+        JSON: {"success": true, "rfid_key": "<uid>", "text": "..."}
+        or {"success": false, "rfid_key": null}
+    """
+    try:
+        raw_timeout = float(request.args.get("timeout", 1.5))
+    except (ValueError, TypeError):
+        raw_timeout = 1.5
+    timeout = min(max(raw_timeout, 0.2), 3.0)
+
+    try:
+        reader = get_rfid_reader_instance()
+        with _rfid_lock:
+            result = reader.wait_for_card(timeout=timeout)
+
+        if result:
+            rfid_key, card_text = result
+            return jsonify({
+                "success": True,
+                "rfid_key": str(rfid_key).strip(),
+                "text": str(card_text).strip() if card_text else "",
+                "message": "Card detected successfully."
+            }), 200
+
+        return jsonify({
+            "success": False,
+            "rfid_key": None,
+            "message": "Waiting for RFID card..."
+        }), 200
+    except Exception as e:
+        logger.error("Error during hardware RFID scan API call: %s", e)
+        return jsonify({
+            "success": False,
+            "rfid_key": None,
+            "error": str(e)
+        }), 500
+

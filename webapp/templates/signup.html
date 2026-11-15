@@ -29,8 +29,17 @@
 
             <div class="form-group">
                 <label for="rfid_key">RFID Card UID / Key *</label>
-                <input type="text" id="rfid_key" name="rfid_key" required placeholder="e.g. 1234567890" class="form-control">
-                <small class="form-help">Scan or enter the unique identifier of the RFID card.</small>
+                <div class="input-with-button" style="display: flex; gap: 8px;">
+                    <input type="text" id="rfid_key" name="rfid_key" required placeholder="Click to scan or enter UID" class="form-control" autocomplete="off">
+                    <button type="button" id="btn_scan_rfid" class="btn btn-secondary" style="white-space: nowrap; display: flex; align-items: center; gap: 6px;">
+                        <span>📡</span> <span id="scan_btn_label">Scan Card</span>
+                    </button>
+                </div>
+                <div id="rfid_scan_indicator" class="rfid-scanner-badge" style="display: none;">
+                    <span class="rfid-pulse-dot"></span>
+                    <span id="rfid_scan_msg">Sensor ready — tap card on Raspberry Pi RC522 reader...</span>
+                </div>
+                <small class="form-help">Click the field or tap 'Scan Card', then hold your RFID tag near the RC522 sensor on the Pi.</small>
             </div>
 
             <div class="form-group">
@@ -53,4 +62,132 @@
         </form>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const rfidInput = document.getElementById("rfid_key");
+    const scanBtn = document.getElementById("btn_scan_rfid");
+    const scanBtnLabel = document.getElementById("scan_btn_label");
+    const indicator = document.getElementById("rfid_scan_indicator");
+    const scanMsg = document.getElementById("rfid_scan_msg");
+    const emailInput = document.getElementById("email");
+
+    let isScanning = false;
+    let abortController = null;
+    let pollTimer = null;
+
+    function setScanningUI(active) {
+        isScanning = active;
+        if (active) {
+            indicator.style.display = "flex";
+            indicator.className = "rfid-scanner-badge scanning";
+            scanMsg.textContent = "📡 Sensor active — tap card on Raspberry Pi RC522 reader...";
+            scanBtnLabel.textContent = "Cancel";
+            scanBtn.classList.remove("btn-secondary");
+            scanBtn.classList.add("btn-outline");
+            rfidInput.classList.add("input-scanning-active");
+        } else {
+            scanBtnLabel.textContent = "Scan Card";
+            scanBtn.classList.remove("btn-outline");
+            scanBtn.classList.add("btn-secondary");
+            rfidInput.classList.remove("input-scanning-active");
+        }
+    }
+
+    async function pollRFIDReader() {
+        if (!isScanning) return;
+        abortController = new AbortController();
+
+        try {
+            const resp = await fetch("/api/v1/hardware/rfid-scan?timeout=1.5", {
+                signal: abortController.signal
+            });
+            const data = await resp.json();
+
+            if (data.success && data.rfid_key) {
+                // Card detected! Populate input
+                rfidInput.value = data.rfid_key;
+                indicator.style.display = "flex";
+                indicator.className = "rfid-scanner-badge success";
+                scanMsg.textContent = `✅ Card scanned successfully: UID ${data.rfid_key}`;
+                rfidInput.classList.remove("input-scanning-active");
+                rfidInput.classList.add("input-scan-success");
+
+                // Stop scanning loop
+                setScanningUI(false);
+
+                // Focus next field
+                if (emailInput) {
+                    setTimeout(() => emailInput.focus(), 600);
+                }
+                return;
+            }
+        } catch (err) {
+            if (err.name !== "AbortError") {
+                console.debug("RFID poll:", err);
+            }
+        }
+
+        // Keep polling as long as scanning is active
+        if (isScanning) {
+            pollTimer = setTimeout(pollRFIDReader, 300);
+        }
+    }
+
+    function startScanning() {
+        if (isScanning) return;
+        setScanningUI(true);
+        pollRFIDReader();
+    }
+
+    function stopScanning(keepBadge = false) {
+        if (!isScanning) return;
+        setScanningUI(false);
+        if (pollTimer) {
+            clearTimeout(pollTimer);
+            pollTimer = null;
+        }
+        if (abortController) {
+            abortController.abort();
+            abortController = null;
+        }
+        if (!keepBadge) {
+            indicator.style.display = "none";
+        }
+    }
+
+    // Auto-start scanning when the user clicks or focuses the RFID field
+    rfidInput.addEventListener("focus", () => {
+        if (!rfidInput.value) {
+            startScanning();
+        }
+    });
+
+    rfidInput.addEventListener("click", () => {
+        startScanning();
+    });
+
+    // Toggle scanning with button
+    scanBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (isScanning) {
+            stopScanning();
+        } else {
+            rfidInput.focus();
+            startScanning();
+        }
+    });
+
+    // Stop scanning if user manually types in the field
+    rfidInput.addEventListener("input", () => {
+        if (isScanning && rfidInput.value.length > 0) {
+            stopScanning(true);
+            indicator.className = "rfid-scanner-badge success";
+            scanMsg.textContent = `UID: ${rfidInput.value}`;
+        }
+    });
+});
+</script>
 {% endblock %}
