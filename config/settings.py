@@ -45,11 +45,11 @@ else:
     SIMULATION_MODE = not is_raspberry_pi()
 
 # === Database Configuration ===
-DB_HOST = os.environ.get("DB_HOST", "localhost")
+DB_HOST = os.environ.get("DB_HOST", "db.aerochrome.in")
 DB_PORT = int(os.environ.get("DB_PORT", 3306))
-DB_USER = os.environ.get("DB_USER", "digibook")
-DB_PASSWORD = os.environ.get("DB_PASSWORD", "digibook_secure_pass_2026")
-DB_NAME = os.environ.get("DB_NAME", "digibook")
+DB_USER = os.environ.get("DB_USER", "u672633758_digibook")
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "DigiBook@8520")
+DB_NAME = os.environ.get("DB_NAME", "u672633758_digibook")
 DB_POOL_SIZE = int(os.environ.get("DB_POOL_SIZE", 3))
 
 # === Security & Session Settings ===

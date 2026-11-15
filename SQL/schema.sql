@@ -1,7 +1,8 @@
 -- DigiBook Database Schema
 -- Compatible with MySQL 8.0+ and MariaDB 10.5+
 
-USE digibook;
+-- CREATE DATABASE IF NOT EXISTS `u672633758_digibook` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- USE `u672633758_digibook`;
 
 -- ============================================
 -- TABLE: students
