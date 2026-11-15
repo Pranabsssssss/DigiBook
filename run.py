@@ -5,13 +5,19 @@ Hardware: Raspberry Pi 3B+ (or Windows/Linux PC in simulation mode)
 RC522 RFID reader · Logitech USB Camera · Green LED Pen · Projector/Display
 """
 
+import os
 import sys
 import time
 import argparse
 import logging
 import numpy as np
 
-from config.settings import SCREEN_WIDTH, SCREEN_HEIGHT, SIMULATION_MODE
+# Ensure project root is in sys.path
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
+from config.settings import SCREEN_WIDTH, SCREEN_HEIGHT, SIMULATION_MODE, is_raspberry_pi
 from config.hardware import CAMERA_DEVICE_INDEX, CAMERA_BACKEND, LED_TYPE
 from core.database import get_db
 from hardware import create_hardware, CoordinateTransformer
@@ -43,7 +49,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="DigiBook — RFID Digital Whiteboard System")
     parser.add_argument("-c", "--camera", type=str, default=CAMERA_BACKEND, help="Camera backend ('usb', 'ribbon', 'auto')")
     parser.add_argument("-d", "--device", type=int, default=CAMERA_DEVICE_INDEX, help="USB camera device index (default: 0)")
-    parser.add_argument("-s", "--simulate", action="store_true", default=SIMULATION_MODE, help="Run in simulation mode")
+    parser.add_argument("-s", "--simulate", action="store_true", default=False, help="Force simulation mode (default: use physical hardware on Raspberry Pi)")
     parser.add_argument("-w", "--windowed", action="store_true", help="Run windowed instead of fullscreen")
     parser.add_argument("--skip-calibration", action="store_true", help="Skip display calibration studio on startup")
     return parser.parse_args()
@@ -51,7 +57,10 @@ def parse_args():
 
 def main():
     args = parse_args()
-    logger.info("Initializing DigiBook on %dx%d (Simulation=%s)...", SCREEN_WIDTH, SCREEN_HEIGHT, args.simulate)
+    is_rpi = is_raspberry_pi()
+    effective_simulation = args.simulate or (not is_rpi)
+
+    logger.info("Initializing DigiBook on %dx%d (Simulation=%s, Physical RPi Hardware=%s)...", SCREEN_WIDTH, SCREEN_HEIGHT, effective_simulation, is_rpi and not effective_simulation)
 
     # 1. Initialize Pygame Display
     if pygame is None:
@@ -59,7 +68,7 @@ def main():
         sys.exit(1)
 
     pygame.init()
-    if args.windowed or args.simulate:
+    if args.windowed or effective_simulation:
         screen = pygame.display.set_mode((min(1280, SCREEN_WIDTH), min(720, SCREEN_HEIGHT)))
     else:
         screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
@@ -77,7 +86,7 @@ def main():
         logger.warning("Could not ping MySQL database on startup. Offline / fallback mode active.")
 
     # 3. Hardware Initialization
-    rfid_reader, camera, detector = create_hardware(simulation=args.simulate)
+    rfid_reader, camera, detector = create_hardware(simulation=effective_simulation)
     try:
         camera.start()
     except Exception as e:
@@ -121,7 +130,7 @@ def main():
     current_session_token = None
     current_whiteboard = None
 
-    rfid_screen = RFIDScanScreen(width, height, simulation_mode=args.simulate)
+    rfid_screen = RFIDScanScreen(width, height, simulation_mode=effective_simulation)
     pin_screen = None
     dashboard = None
     whiteboard_view = None
@@ -174,11 +183,24 @@ def main():
                             running = False
                     elif event.key == pygame.K_r:
                         # Instant card trigger (works in both simulation and hardware mode)
-                        test_uid = "1234567890"
+                        test_uid = None
                         if hasattr(rfid_reader, "wait_for_card"):
                             card_res = rfid_reader.wait_for_card(timeout=0.01)
                             if card_res:
                                 test_uid = card_res[0]
+                        if not test_uid:
+                            # Test with registered student in database needing PIN setup
+                            try:
+                                sample_stu = db.execute_one("SELECT rfid_key FROM students WHERE pin_set = 0 LIMIT 1")
+                                if not sample_stu:
+                                    sample_stu = db.execute_one("SELECT rfid_key FROM students LIMIT 1")
+                                if sample_stu and sample_stu.get("rfid_key"):
+                                    test_uid = str(sample_stu["rfid_key"])
+                            except Exception:
+                                pass
+                        if not test_uid:
+                            test_uid = "282602309346"
+
                         logger.info("['R' Key Pressed] Triggering RFID scan for UID: %s", test_uid)
                         scan_status, stu = rfid_screen.process_card_scan(test_uid, db=db)
                         logger.info("RFID Scanned: UID=%s -> Status: %s", test_uid, scan_status)

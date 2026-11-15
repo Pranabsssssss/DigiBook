@@ -5,8 +5,14 @@ Run this tool directly on the Raspberry Pi to test RC522 wiring, antenna, and ca
     python3 tools/test_rfid_hardware.py
 """
 
+import os
 import sys
 import time
+
+# Ensure repository root is in sys.path
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
 try:
     import hardware.rfid  # Applies Python 3.13 transceiver loop patch

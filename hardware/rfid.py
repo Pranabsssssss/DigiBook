@@ -163,10 +163,10 @@ class RFIDReader:
         lock_fd = None
         if fcntl and os.name != "nt":
             try:
-                lock_fd = open(LOCK_PATH, "w")
+                lock_fd = open(LOCK_PATH, "a")
                 fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except (IOError, OSError):
-                # Lock held by another process; yield immediately
+            except (IOError, OSError, PermissionError):
+                # Lock held by another process or permission error; yield immediately
                 if lock_fd:
                     try:
                         lock_fd.close()
