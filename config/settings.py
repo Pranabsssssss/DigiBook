@@ -30,11 +30,22 @@ PEN_MODEL_FILE = os.path.join(MODELS_DIR, "pen_model.json")
 def is_raspberry_pi() -> bool:
     """Detect if running on Raspberry Pi hardware."""
     try:
-        with open("/proc/device-tree/model", "r", encoding="utf-8") as f:
-            model = f.read()
-            return "Raspberry Pi" in model
+        for p in ("/proc/device-tree/model", "/sys/firmware/devicetree/base/model"):
+            if os.path.exists(p):
+                with open(p, "r", encoding="utf-8", errors="ignore") as f:
+                    if "Raspberry Pi" in f.read():
+                        return True
+        if os.path.exists("/proc/cpuinfo"):
+            with open("/proc/cpuinfo", "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+                if "Raspberry Pi" in content or "BCM2835" in content or "BCM2711" in content or "BCM2837" in content:
+                    return True
+        # Check for Pi-specific peripheral hardware devices
+        if os.path.exists("/dev/gpiomem") or os.path.exists("/dev/spidev0.0"):
+            return True
     except Exception:
-        return False
+        pass
+    return False
 
 DIGIBOOK_ENV = os.environ.get("DIGIBOOK_ENV", "development").lower()
 _sim_env = os.environ.get("DIGIBOOK_SIMULATE")

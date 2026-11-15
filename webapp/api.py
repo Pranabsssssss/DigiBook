@@ -329,17 +329,26 @@ def api_hardware_rfid_scan():
     Poll the connected RC522 RFID reader on Raspberry Pi for an RFID card.
     Used by the registration page to automatically populate the RFID field
     when a student taps their card on the physical reader.
-    Query parameters:
-        timeout: float in seconds (default 1.5, min 0.2, max 3.0)
-    Returns:
-        JSON: {"success": true, "rfid_key": "<uid>", "text": "..."}
-        or {"success": false, "rfid_key": null}
+    Coordinates with run.py via shared broadcast cache to prevent SPI bus starvation.
     """
     try:
-        raw_timeout = float(request.args.get("timeout", 1.5))
+        from hardware.rfid import get_broadcast_scanned_card
+        cached_uid = get_broadcast_scanned_card(max_age=2.5)
+        if cached_uid:
+            return jsonify({
+                "success": True,
+                "rfid_key": str(cached_uid).strip(),
+                "text": "",
+                "message": "Card detected successfully (shared bus)."
+            }), 200
+    except Exception:
+        pass
+
+    try:
+        raw_timeout = float(request.args.get("timeout", 0.5))
     except (ValueError, TypeError):
-        raw_timeout = 1.5
-    timeout = min(max(raw_timeout, 0.2), 3.0)
+        raw_timeout = 0.5
+    timeout = min(max(raw_timeout, 0.1), 1.5)
 
     try:
         reader = get_rfid_reader_instance()

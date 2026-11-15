@@ -277,7 +277,7 @@ def run_calibration(camera, screen=None) -> np.ndarray:
             # Render Selection Screen
             screen.fill((14, 17, 24))
 
-            title_surf = font_title.render("DIGIBOOK — DISPLAY CALIBRATION", True, (40, 240, 180))
+            title_surf = font_title.render("DIGIBOOK — DISPLAY CALIBRATION", True, (0, 240, 255))
             sub_surf = font_sub.render("Choose how you want to calibrate your monitor display boundaries:", True, (200, 215, 235))
             screen.blit(title_surf, (sw // 2 - title_surf.get_width() // 2, card_y - 95))
             screen.blit(sub_surf, (sw // 2 - sub_surf.get_width() // 2, card_y - 55))
@@ -292,7 +292,7 @@ def run_calibration(camera, screen=None) -> np.ndarray:
             t_a2 = font_regular.render("Computer Vision Page Scanner algorithm.", True, (230, 240, 255))
             t_a3 = font_regular.render("The screen flashes an illuminated border;", True, (170, 195, 220))
             t_a4 = font_regular.render("the camera automatically detects display edges.", True, (170, 195, 220))
-            t_a5 = font_bold.render("Click here or press [1] to start Auto", True, (60, 255, 100))
+            t_a5 = font_bold.render("Click here or press [1] to start Auto", True, (0, 240, 255))
 
             screen.blit(t_a1, (card_auto_rect.x + 25, card_auto_rect.y + 25))
             screen.blit(t_a2, (card_auto_rect.x + 25, card_auto_rect.y + 68))
@@ -579,7 +579,7 @@ def run_calibration(camera, screen=None) -> np.ndarray:
 
             # Semi-transparent polygon overlay for the display zone
             overlay = annotated.copy()
-            cv2.fillPoly(overlay, [disp_corners], color=(20, 60, 40))
+            cv2.fillPoly(overlay, [disp_corners], color=(45, 25, 12))
             cv2.addWeighted(overlay, 0.28, annotated, 0.72, 0, annotated)
 
             # Draw 4 DocScanner edges
@@ -592,9 +592,9 @@ def run_calibration(camera, screen=None) -> np.ndarray:
             center_y = int((disp_corners[0][1] + disp_corners[2][1]) // 2)
             cv2.drawMarker(annotated, (center_x, center_y), (0, 255, 255), cv2.MARKER_CROSS, 16, 2)
 
-            # Draw 4 Draggable Corner Pins with badges
+            # Draw 4 Draggable Corner Pins with badges (no green to prevent optical loop)
             pin_info = [
-                ("TL", (60, 255, 100)),   # Green
+                ("TL", (255, 255, 255)),  # White (replaces green)
                 ("TR", (255, 220, 40)),   # Yellow
                 ("BR", (255, 140, 40)),   # Orange
                 ("BL", (0, 200, 255))     # Cyan
@@ -640,7 +640,7 @@ def run_calibration(camera, screen=None) -> np.ndarray:
             screen.fill((14, 17, 24))
 
             # Header & Status
-            title_surf = font_title.render("DISPLAY CALIBRATION STUDIO — DOCSCANNER & MANUAL EDGES", True, (40, 240, 180))
+            title_surf = font_title.render("DISPLAY CALIBRATION STUDIO — DOCSCANNER & MANUAL EDGES", True, (0, 240, 255))
             if manual_click_mode:
                 c_prompts = [
                     "Step 1/4: Click on the TOP-LEFT corner of your physical display in the camera feed",
@@ -651,7 +651,7 @@ def run_calibration(camera, screen=None) -> np.ndarray:
                 sub_surf = font_sub.render(c_prompts[min(manual_step, 3)], True, (255, 220, 80))
             elif dragging_pin_idx is not None:
                 tag_name = pin_info[dragging_pin_idx][0]
-                sub_surf = font_sub.render(f"DRAGGING [{tag_name}] CORNER: Move mouse to align pin with monitor edge", True, (60, 255, 120))
+                sub_surf = font_sub.render(f"DRAGGING [{tag_name}] CORNER: Move mouse to align pin with monitor edge", True, (0, 240, 255))
             else:
                 sub_surf = font_sub.render(
                     "Review edges below. Click and drag any corner pin (TL, TR, BR, BL) with mouse to fine-tune alignment.",
@@ -681,7 +681,7 @@ def run_calibration(camera, screen=None) -> np.ndarray:
             # Status Badge
             if is_convex and min(w_top, w_btm, h_left, h_right) > 80:
                 badge_text = "STATUS: VALID DISPLAY QUAD (Accurate & Ready)"
-                badge_col = (60, 255, 100)
+                badge_col = (0, 240, 255)
             else:
                 badge_text = "STATUS: DISTORTED / SKEWED (Adjust corner pins)"
                 badge_col = (255, 120, 50)
@@ -733,11 +733,11 @@ def run_calibration(camera, screen=None) -> np.ndarray:
             # ---------------------------------------------------------
             # Render Action Buttons with Hover Effects
             # ---------------------------------------------------------
-            # Button 1: Accept & Continue
-            pygame.draw.rect(screen, (35, 135, 65) if hover_btn_accept else (20, 85, 40), btn_accept_rect, border_radius=8)
-            pygame.draw.rect(screen, (100, 255, 140) if hover_btn_accept else (50, 200, 90), btn_accept_rect, 2, border_radius=8)
+            # Button 1: Accept & Continue (Electric Indigo/Cyan, zero green to avoid camera detection)
+            pygame.draw.rect(screen, (20, 85, 140) if hover_btn_accept else (14, 55, 95), btn_accept_rect, border_radius=8)
+            pygame.draw.rect(screen, (0, 240, 255) if hover_btn_accept else (0, 180, 220), btn_accept_rect, 2, border_radius=8)
             m1 = font_btn_title.render("[ENTER] Accept & Continue", True, (255, 255, 255))
-            s1 = font_btn_sub.render("Edges aligned - Launch Whiteboard", True, (200, 255, 220))
+            s1 = font_btn_sub.render("Edges aligned - Launch Whiteboard", True, (200, 240, 255))
             screen.blit(m1, (btn_accept_rect.centerx - m1.get_width() // 2, btn_accept_rect.y + (12 if sh >= 900 else 8)))
             screen.blit(s1, (btn_accept_rect.centerx - s1.get_width() // 2, btn_accept_rect.y + (36 if sh >= 900 else 30)))
 

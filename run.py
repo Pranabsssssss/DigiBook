@@ -215,6 +215,7 @@ def main():
                             state = STATE_PIN_LOGIN
                             logger.info("Student '%s' recognized! Prompting for 4-digit PIN.", stu.student_name)
                         elif scan_status == "NOT_FOUND":
+                            rfid_screen.show_error(f"UID {test_uid}: Not in Database (Register Student)", duration=4.5)
                             logger.warning("RFID UID '%s' is NOT present in the database! Register student at https://digibook.pranab.space/signup", test_uid)
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     # Direct mouse click support for buttons, cards, and keypad
@@ -256,6 +257,7 @@ def main():
                         state = STATE_PIN_LOGIN
                         logger.info("Student '%s' recognized! Prompting for 4-digit PIN.", stu.student_name)
                     elif scan_status == "NOT_FOUND":
+                        rfid_screen.show_error(f"UID {uid}: Not in Database (Register Student)", duration=4.5)
                         logger.warning("RFID UID '%s' is NOT present in the database! Register student at https://digibook.pranab.space/signup", uid)
 
             # --- Camera Capture & Green LED Tracking ---

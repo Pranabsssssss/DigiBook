@@ -48,7 +48,7 @@ class RFIDScanScreen:
         """
         status, student = authenticate_rfid_step1(rfid_key, db=db)
         if status == "NOT_FOUND":
-            self.show_error("Not Present in Database")
+            self.show_error(f"UID {rfid_key}: Not in Database (Please Register)", duration=4.5)
         return status, student
 
     def render(self, surface):
@@ -77,7 +77,7 @@ class RFIDScanScreen:
 
         # Error / Status Banner
         if self.error_message and now < self.error_expiry:
-            err_box = pygame.Rect(self.width // 2 - 250, self.height // 2 + 150, 500, 55)
+            err_box = pygame.Rect(self.width // 2 - 320, self.height // 2 + 150, 640, 55)
             pygame.draw.rect(surface, (80, 20, 20), err_box, border_radius=8)
             pygame.draw.rect(surface, (255, 60, 60), err_box, 2, border_radius=8)
             if self.font_msg:
