@@ -13,9 +13,83 @@ except ImportError:
 # Conditional import of RC522 / RPi.GPIO
 RPI_RFID_AVAILABLE = False
 try:
-    from mfrc522 import SimpleMFRC522
+    from mfrc522 import SimpleMFRC522, MFRC522
     import RPi.GPIO as GPIO
     RPI_RFID_AVAILABLE = True
+
+    # --- CRITICAL BUGFIX FOR PYTHON 3.13 / mfrc522 PACKAGE ---
+    # The upstream mfrc522 library contains a fatal bug in MFRC522_ToCard:
+    # "if ~((i != 0) and ~(n & 0x01) and ~(n & waitIRq)): break"
+    # In Python, ~bool is ALWAYS negative (-1 or -2), which is always truthy!
+    # This caused the transceiver loop to abort on cycle 1 before receiving RF response from card.
+    def _fixed_MFRC522_ToCard(self, command, sendData):
+        backData = []
+        backLen = 0
+        status = self.MI_ERR
+        irqEn = 0x00
+        waitIRq = 0x00
+        lastBits = None
+        n = 0
+
+        if command == self.PCD_AUTHENT:
+            irqEn = 0x12
+            waitIRq = 0x10
+        if command == self.PCD_TRANSCEIVE:
+            irqEn = 0x77
+            waitIRq = 0x30
+
+        self.Write_MFRC522(self.CommIEnReg, irqEn | 0x80)
+        self.ClearBitMask(self.CommIrqReg, 0x80)
+        self.SetBitMask(self.FIFOLevelReg, 0x80)
+
+        self.Write_MFRC522(self.CommandReg, self.PCD_IDLE)
+
+        for b in sendData:
+            self.Write_MFRC522(self.FIFODataReg, b)
+
+        self.Write_MFRC522(self.CommandReg, command)
+
+        if command == self.PCD_TRANSCEIVE:
+            self.SetBitMask(self.BitFramingReg, 0x80)
+
+        i = 2000
+        while True:
+            n = self.Read_MFRC522(self.CommIrqReg)
+            i -= 1
+            # Correct Python logical break condition
+            if i == 0 or (n & 0x01) != 0 or (n & waitIRq) != 0:
+                break
+
+        self.ClearBitMask(self.BitFramingReg, 0x80)
+
+        if i != 0:
+            err = self.Read_MFRC522(self.ErrorReg)
+            if (err & 0x1B) == 0x00:
+                status = self.MI_OK
+                if n & irqEn & 0x01:
+                    status = self.MI_NOTAGERR
+                if command == self.PCD_TRANSCEIVE:
+                    n = self.Read_MFRC522(self.FIFOLevelReg)
+                    lastBits = self.Read_MFRC522(self.ControlReg) & 0x07
+                    if lastBits != 0:
+                        backLen = (n - 1) * 8 + lastBits
+                    else:
+                        backLen = n * 8
+
+                    if n == 0:
+                        n = 1
+                    if n > self.MAX_LEN:
+                        n = self.MAX_LEN
+
+                    for _ in range(n):
+                        backData.append(self.Read_MFRC522(self.FIFODataReg))
+            else:
+                status = self.MI_ERR
+
+        return (status, backData, backLen)
+
+    MFRC522.MFRC522_ToCard = _fixed_MFRC522_ToCard
+
 except (ImportError, RuntimeError):
     # RuntimeError occurs on non-Raspberry Pi OS (e.g., "Must be run on a Raspberry Pi")
     pass
@@ -48,7 +122,7 @@ class RFIDReader:
                     self.reader = SimpleMFRC522()
                     # Maximize antenna gain (48dB) for superior detection distance
                     try:
-                        self.reader.READER.SetAntennaGain(0x07 << 4)
+                        self.reader.READER.Write_MFRC522(self.reader.READER.RFCfgReg, 0x07 << 4)
                         self.reader.READER.AntennaOn()
                     except Exception:
                         pass
