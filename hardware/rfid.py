@@ -1,8 +1,14 @@
 import logging
+import os
 import time
 from typing import Optional, Tuple
 
 logger = logging.getLogger("DigiBook.RFID")
+
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
 
 # Conditional import of RC522 / RPi.GPIO
 RPI_RFID_AVAILABLE = False
@@ -14,11 +20,14 @@ except (ImportError, RuntimeError):
     # RuntimeError occurs on non-Raspberry Pi OS (e.g., "Must be run on a Raspberry Pi")
     pass
 
+LOCK_PATH = "/tmp/digibook_rfid.lock"
+
 
 class RFIDReader:
     """
     Interface for the RC522 RFID reader.
-    Handles SPI communication on Raspberry Pi with fallback protection.
+    Handles SPI communication on Raspberry Pi with cross-process locking
+    to allow simultaneous operation between run.py and webapp services.
     """
 
     def __init__(self, simulation: bool = False):
@@ -35,8 +44,15 @@ class RFIDReader:
                 self.simulation = True
             else:
                 try:
+                    GPIO.setwarnings(False)
                     self.reader = SimpleMFRC522()
-                    logger.info("RC522 RFID reader initialized successfully on SPI.")
+                    # Maximize antenna gain (48dB) for superior detection distance
+                    try:
+                        self.reader.READER.SetAntennaGain(0x07 << 4)
+                        self.reader.READER.AntennaOn()
+                    except Exception:
+                        pass
+                    logger.info("RC522 RFID reader initialized successfully on SPI (Gain: 48dB).")
                 except Exception as e:
                     logger.error("Failed to initialize RC522 hardware: %s. Falling back to simulation.", e)
                     self.simulation = True
@@ -45,45 +61,74 @@ class RFIDReader:
         """
         Block until an RFID card is presented or timeout is reached.
         Returns: (rfid_key, card_text) or None if timeout.
-        The card's hardware UID is converted to a string and used as rfid_key.
         """
         if self.simulation:
             return self._simulated_wait_for_card(timeout)
 
         start_time = time.time()
         while True:
-            try:
-                card_id, card_text = self.reader.read_no_block()
-                if card_id is not None:
-                    rfid_key = str(card_id).strip()
-                    text = str(card_text).strip() if card_text else ""
-                    logger.info("RFID card scanned: UID=%s", rfid_key)
-                    return rfid_key, text
-            except Exception as e:
-                logger.debug("Error during non-blocking RFID read: %s", e)
+            card = self.read_card_nonblocking()
+            if card is not None:
+                return card
 
             if timeout is not None and (time.time() - start_time) >= timeout:
                 return None
 
-            time.sleep(0.05)
+            time.sleep(0.04)
 
     def read_card_nonblocking(self) -> Optional[Tuple[str, str]]:
         """
-        Non-blocking read attempt. Returns immediately.
+        Non-blocking read attempt with cross-process concurrency locking.
+        Uses fast anticollision UID detection and PICC_REQALL (WUPA) fallback.
         Returns: (rfid_key, card_text) or None if no card is present.
         """
         if self.simulation or self.reader is None:
             return None
 
+        # Cross-process non-blocking file lock so run.py and web services share SPI cleanly
+        lock_fd = None
+        if fcntl and os.name != "nt":
+            try:
+                lock_fd = open(LOCK_PATH, "w")
+                fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except (IOError, OSError):
+                # Lock held by another process; yield immediately
+                if lock_fd:
+                    try:
+                        lock_fd.close()
+                    except Exception:
+                        pass
+                return None
+
         try:
-            card_id, card_text = self.reader.read_no_block()
+            # 1. Fast UID read without slow block authentication
+            card_id = self.reader.read_id_no_block()
+
+            # 2. If no card via REQIDL, try WUPA (PICC_REQALL) for cards in HALT state
+            if card_id is None:
+                try:
+                    m = self.reader.READER
+                    (status, _) = m.MFRC522_Request(m.PICC_REQALL)
+                    if status == m.MI_OK:
+                        (status, uid) = m.MFRC522_Anticoll()
+                        if status == m.MI_OK:
+                            card_id = self.reader.uid_to_num(uid)
+                except Exception:
+                    pass
+
             if card_id is not None:
                 rfid_key = str(card_id).strip()
-                text = str(card_text).strip() if card_text else ""
                 logger.info("RFID card detected: UID=%s", rfid_key)
-                return rfid_key, text
+                return rfid_key, ""
         except Exception as e:
             logger.debug("Error in read_card_nonblocking: %s", e)
+        finally:
+            if lock_fd:
+                try:
+                    fcntl.flock(lock_fd, fcntl.LOCK_UN)
+                    lock_fd.close()
+                except Exception:
+                    pass
 
         return None
 

@@ -194,14 +194,19 @@ def main():
                 if card:
                     uid, _ = card
                     scan_status, stu = rfid_screen.process_card_scan(uid, db=db)
+                    logger.info("RFID Scanned: UID=%s -> Status: %s", uid, scan_status)
                     if scan_status == "NEEDS_PIN_CREATION":
                         current_student = stu
                         pin_screen = PINEntryScreen(width, height, stu, mode=PINEntryScreen.MODE_CREATE)
                         state = STATE_PIN_CREATE
+                        logger.info("Student '%s' recognized! Starting first-time 4-digit PIN setup.", stu.student_name)
                     elif scan_status == "NEEDS_PIN_ENTRY":
                         current_student = stu
                         pin_screen = PINEntryScreen(width, height, stu, mode=PINEntryScreen.MODE_LOGIN)
                         state = STATE_PIN_LOGIN
+                        logger.info("Student '%s' recognized! Prompting for 4-digit PIN.", stu.student_name)
+                    elif scan_status == "NOT_FOUND":
+                        logger.warning("RFID UID '%s' is NOT present in the database! Register student at https://digibook.pranab.space/signup", uid)
 
             # --- Camera Capture & Green LED Tracking ---
             try:
