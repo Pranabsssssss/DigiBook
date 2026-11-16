@@ -9,6 +9,8 @@ User=book
 Group=book
 WorkingDirectory=/home/book/Desktop/DigiBook
 Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+Environment="SDL_VIDEODRIVER=dummy"
+Environment="XDG_RUNTIME_DIR=/run/user/1000"
 EnvironmentFile=-/home/book/Desktop/DigiBook/.env
 ExecStart=/usr/bin/gunicorn -c deployment/gunicorn.conf.py "webapp.app:create_app()"
 Restart=always
