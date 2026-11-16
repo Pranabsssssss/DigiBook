@@ -88,50 +88,53 @@ class LocalWhiteboardView:
         self.notification_expiry = time.time() + duration
 
     def _build_toolbar_zones(self):
-        """Create on-screen button zones anchored along the top-right."""
+        """Create on-screen button zones cleanly arranged without overlapping."""
         self.zones.clear()
 
-        btn_w = 90
         btn_h = 42
-        gap = 12
-        y = 12
+        gap = 8
+        y = 11
 
         # 1. Back button (top left)
         self.zones.append(
             InteractiveZone(
                 zone_id="BTN_BACK",
-                rect=(20, y, 90, btn_h),
+                rect=(16, y, 82, btn_h),
                 action_callback=self._handle_back_pressed,
                 dwell_time=0.7,
+                label="< BACK",
             )
         )
 
-        # Toolbar items on the right side
+        # 2. Toolbar items on the right side: (zone_id, label, callback, width, color_swatch)
         buttons = [
-            ("BTN_PEN", "PEN", lambda: self.engine.select_tool(TOOL_PEN.name)),
-            ("BTN_ERASER", "ERASER", lambda: self.engine.select_tool(TOOL_ERASER.name)),
-            ("BTN_COLOR_WHITE", "WHITE", lambda: self.engine.set_color("#FFFFFF")),
-            ("BTN_COLOR_CYAN", "CYAN", lambda: self.engine.set_color("#00F0FF")),
-            ("BTN_COLOR_YELLOW", "AMBER", lambda: self.engine.set_color("#FFB800")),
-            ("BTN_ZOOM_IN", "ZOOM +", lambda: self.renderer.viewport.zoom_in(1.3)),
-            ("BTN_ZOOM_OUT", "ZOOM -", lambda: self.renderer.viewport.zoom_out(1.3)),
-            ("BTN_CLEAR", "CLEAR", self.engine.clear),
-            ("BTN_SAVE", "SAVE", self.save_to_database),
+            ("BTN_PEN", "PEN", lambda: self.engine.select_tool(TOOL_PEN.name), 66, None),
+            ("BTN_ERASER", "ERASER", lambda: self.engine.select_tool(TOOL_ERASER.name), 76, None),
+            ("BTN_COLOR_WHITE", "", lambda: self.engine.set_color("#FFFFFF"), 44, "#FFFFFF"),
+            ("BTN_COLOR_CYAN", "", lambda: self.engine.set_color("#00F0FF"), 44, "#00F0FF"),
+            ("BTN_COLOR_YELLOW", "", lambda: self.engine.set_color("#FFB800"), 44, "#FFB800"),
+            ("BTN_ZOOM_IN", "+", lambda: self.renderer.viewport.zoom_in(1.3), 44, None),
+            ("BTN_ZOOM_OUT", "-", lambda: self.renderer.viewport.zoom_out(1.3), 44, None),
+            ("BTN_CLEAR", "CLEAR", self.engine.clear, 68, None),
+            ("BTN_SAVE", "SAVE", self.save_to_database, 66, None),
         ]
 
-        total_w = len(buttons) * (btn_w + gap) - gap
-        start_x = max(130, self.width - total_w - 20)
+        total_w = sum(w for _, _, _, w, _ in buttons) + gap * (len(buttons) - 1)
+        start_x = max(110, self.width - total_w - 16)
 
-        for i, (bid, lbl, cb) in enumerate(buttons):
-            bx = start_x + i * (btn_w + gap)
+        curr_x = start_x
+        for bid, lbl, cb, bw, swatch in buttons:
             self.zones.append(
                 InteractiveZone(
                     zone_id=bid,
-                    rect=(bx, y, btn_w, btn_h),
+                    rect=(curr_x, y, bw, btn_h),
                     action_callback=cb,
                     dwell_time=0.6,
+                    label=lbl,
+                    color_swatch=swatch,
                 )
             )
+            curr_x += bw + gap
 
     def _handle_back_pressed(self):
         # Auto-save before navigating back
@@ -193,28 +196,54 @@ class LocalWhiteboardView:
             elif zone.zone_id == "BTN_ERASER" and self.engine.active_tool == TOOL_ERASER.name:
                 is_active_tool = True
 
+            # Active color highlight
+            is_active_color = False
+            if zone.color_swatch and getattr(self.engine, "active_color", None):
+                if self.engine.active_color.upper() == zone.color_swatch.upper() and self.engine.active_tool != TOOL_ERASER.name:
+                    is_active_color = True
+
             if zone.zone_id == "BTN_BACK":
                 bg = (60, 20, 20) if is_hovered else (35, 20, 20)
                 border = (255, 80, 80) if is_hovered else (150, 50, 50)
-                lbl = "< BACK"
-            elif is_active_tool:
+            elif is_active_tool or is_active_color:
                 bg = (18, 55, 85)
                 border = (0, 240, 255)
-                lbl = zone.zone_id.replace("BTN_", "")
             elif is_hovered:
                 bg = (40, 60, 85)
                 border = (0, 240, 255)
-                lbl = zone.zone_id.replace("BTN_", "")
             else:
                 bg = (25, 32, 45)
                 border = (60, 75, 95)
-                lbl = zone.zone_id.replace("BTN_", "")
 
             pygame.draw.rect(surface, bg, zone.rect, border_radius=6)
-            pygame.draw.rect(surface, border, zone.rect, 2, border_radius=6)
+            pygame.draw.rect(
+                surface,
+                border,
+                zone.rect,
+                2 if (is_active_tool or is_active_color or is_hovered) else 1,
+                border_radius=6
+            )
 
-            if self.font_btn:
-                btn_txt = self.font_btn.render(lbl, True, (255, 255, 255))
+            # Dwell progress feedback bar
+            if zone.dwell_progress > 0:
+                prog_w = max(2, int(rw * min(1.0, zone.dwell_progress)))
+                pygame.draw.rect(surface, (0, 240, 255), (rx, ry + rh - 4, prog_w, 4), border_radius=2)
+
+            # Color swatch button: render centered circular swatch
+            if zone.color_swatch:
+                cx = rx + rw // 2
+                cy = ry + rh // 2
+                hex_str = zone.color_swatch.lstrip("#")
+                cr, cg, cb = tuple(int(hex_str[i:i+2], 16) for i in (0, 2, 4))
+                if is_active_color:
+                    pygame.draw.circle(surface, (0, 240, 255), (cx, cy), 13, 2)
+                    pygame.draw.circle(surface, (cr, cg, cb), (cx, cy), 9)
+                else:
+                    pygame.draw.circle(surface, (cr, cg, cb), (cx, cy), 10)
+                    pygame.draw.circle(surface, (70, 85, 105), (cx, cy), 10, 1)
+
+            elif zone.label and self.font_btn:
+                btn_txt = self.font_btn.render(zone.label, True, (255, 255, 255))
                 surface.blit(btn_txt, (rx + (rw - btn_txt.get_width()) // 2, ry + (rh - btn_txt.get_height()) // 2))
 
         # Notification Banner

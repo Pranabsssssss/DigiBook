@@ -19,11 +19,21 @@ class InputEvent:
 class InteractiveZone:
     """Represents a clickable or hoverable zone on screen."""
 
-    def __init__(self, zone_id: str, rect: Tuple[int, int, int, int], action_callback=None, dwell_time: float = 0.8):
+    def __init__(
+        self,
+        zone_id: str,
+        rect: Tuple[int, int, int, int],
+        action_callback=None,
+        dwell_time: float = 0.8,
+        label: Optional[str] = None,
+        color_swatch: Optional[str] = None,
+    ):
         self.zone_id = zone_id
         self.rect = rect  # (x, y, w, h)
         self.action_callback = action_callback
         self.dwell_time = dwell_time
+        self.label = label
+        self.color_swatch = color_swatch
         self.dwell_progress = 0.0  # 0.0 to 1.0
 
     def contains(self, pt: Tuple[int, int]) -> bool:
