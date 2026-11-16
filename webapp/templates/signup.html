@@ -37,9 +37,9 @@
                 </div>
                 <div id="rfid_scan_indicator" class="rfid-scanner-badge" style="display: none;">
                     <span class="rfid-pulse-dot"></span>
-                    <span id="rfid_scan_msg">Sensor ready — tap card on Raspberry Pi RC522 reader...</span>
+                    <span id="rfid_scan_msg">Scanner ready — tap card on RFID reader...</span>
                 </div>
-                <small class="form-help">Click the field or tap 'Scan Card', then hold your RFID tag near the RC522 sensor on the Pi.</small>
+                <small class="form-help">Click the field or tap 'Scan Card', then tap your RFID tag on the reader.</small>
             </div>
 
             <div class="form-group">
@@ -80,8 +80,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const scanMsg = document.getElementById("rfid_scan_msg");
     const emailInput = document.getElementById("email");
 
+    const RELAY_WS_URL = "wss://rfid.pranab.space/node?auth=00000000";
+    const RELAY_HTTP_URL = "https://rfid.pranab.space/node?wait=true&auth=00000000";
+    const LOCAL_SCAN_URL = "/api/v1/hardware/rfid-scan?timeout=1.5";
+
     let isScanning = false;
-    let abortController = null;
+    let ws = null;
+    let pollAbortController = null;
     let pollTimer = null;
 
     function setScanningUI(active) {
@@ -89,75 +94,163 @@ document.addEventListener("DOMContentLoaded", () => {
         if (active) {
             indicator.style.display = "flex";
             indicator.className = "rfid-scanner-badge scanning";
-            scanMsg.textContent = "📡 Sensor active — tap card on Raspberry Pi RC522 reader...";
+            scanMsg.textContent = "📡 Scanner active — tap your RFID card on the reader...";
             scanBtnLabel.textContent = "Cancel";
             scanBtn.classList.remove("btn-secondary");
             scanBtn.classList.add("btn-outline");
             rfidInput.classList.add("input-scanning-active");
+            rfidInput.placeholder = "Waiting for card tap...";
         } else {
             scanBtnLabel.textContent = "Scan Card";
             scanBtn.classList.remove("btn-outline");
             scanBtn.classList.add("btn-secondary");
             rfidInput.classList.remove("input-scanning-active");
+            rfidInput.placeholder = "Click to scan or enter UID";
         }
     }
 
-    async function pollRFIDReader() {
-        if (!isScanning) return;
-        abortController = new AbortController();
+    function onCardDetected(cardKey) {
+        if (!cardKey) return;
+        const cleanKey = String(cardKey).trim();
+        rfidInput.value = cleanKey;
+        indicator.style.display = "flex";
+        indicator.className = "rfid-scanner-badge success";
+        scanMsg.textContent = `✅ Card scanned successfully: ${cleanKey}`;
+        rfidInput.classList.remove("input-scanning-active");
+        rfidInput.classList.add("input-scan-success");
 
+        // Stop scanning listeners
+        stopScanning(true);
+
+        // Send 2-way hardware confirmation flash back to physical reader
         try {
-            const resp = await fetch("/api/v1/hardware/rfid-scan?timeout=1.5", {
-                signal: abortController.signal
+            fetch("https://rfid.pranab.space/node", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "x-auth-token": "00000000"
+                },
+                body: JSON.stringify({
+                    command: "flash",
+                    action: "card_scanned",
+                    cardKey: cleanKey,
+                    message: "DigiBook Registered"
+                })
+            }).catch(() => {});
+        } catch (_) {}
+
+        // Auto-focus next field
+        if (emailInput) {
+            setTimeout(() => emailInput.focus(), 500);
+        }
+    }
+
+    function initWebSocket() {
+        if (!("WebSocket" in window)) return;
+        try {
+            ws = new WebSocket(RELAY_WS_URL);
+            ws.onopen = () => {
+                console.debug("[RFID WS] Connected to 0-latency relay hub");
+            };
+            ws.onmessage = (event) => {
+                if (!isScanning) return;
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === "rfid") {
+                        const key = data.encryptedKey || data.discriminant || data.uid;
+                        if (key) {
+                            onCardDetected(key);
+                        }
+                    }
+                } catch (e) {
+                    console.debug("[RFID WS] Parse error:", e);
+                }
+            };
+            ws.onerror = (err) => {
+                console.debug("[RFID WS] Error:", err);
+            };
+            ws.onclose = () => {
+                ws = null;
+            };
+        } catch (e) {
+            console.debug("[RFID WS] Init failed:", e);
+        }
+    }
+
+    async function pollFallback() {
+        if (!isScanning) return;
+        pollAbortController = new AbortController();
+
+        // 1. Try cloud relay HTTP long-polling (wait=true)
+        try {
+            const resp = await fetch(RELAY_HTTP_URL, {
+                signal: pollAbortController.signal,
+                headers: { "x-auth-token": "00000000" }
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                if (data.type === "rfid") {
+                    const key = data.encryptedKey || data.discriminant || data.uid;
+                    if (key) {
+                        onCardDetected(key);
+                        return;
+                    }
+                }
+            }
+        } catch (err) {
+            if (err.name !== "AbortError") {
+                console.debug("[RFID HTTP Relay] poll:", err);
+            }
+        }
+
+        if (!isScanning) return;
+
+        // 2. Fallback to local server proxy endpoint
+        try {
+            const resp = await fetch(LOCAL_SCAN_URL, {
+                signal: pollAbortController.signal
             });
             const data = await resp.json();
-
             if (data.success && data.rfid_key) {
-                // Card detected! Populate input
-                rfidInput.value = data.rfid_key;
-                indicator.style.display = "flex";
-                indicator.className = "rfid-scanner-badge success";
-                scanMsg.textContent = `✅ Card scanned successfully: UID ${data.rfid_key}`;
-                rfidInput.classList.remove("input-scanning-active");
-                rfidInput.classList.add("input-scan-success");
-
-                // Stop scanning loop
-                setScanningUI(false);
-
-                // Focus next field
-                if (emailInput) {
-                    setTimeout(() => emailInput.focus(), 600);
-                }
+                onCardDetected(data.rfid_key);
                 return;
             }
         } catch (err) {
             if (err.name !== "AbortError") {
-                console.debug("RFID poll:", err);
+                console.debug("[RFID Local Proxy] poll:", err);
             }
         }
 
-        // Keep polling as long as scanning is active
+        // Loop if still scanning
         if (isScanning) {
-            pollTimer = setTimeout(pollRFIDReader, 300);
+            pollTimer = setTimeout(pollFallback, 400);
         }
     }
 
     function startScanning() {
         if (isScanning) return;
         setScanningUI(true);
-        pollRFIDReader();
+        initWebSocket();
+        pollFallback();
     }
 
     function stopScanning(keepBadge = false) {
-        if (!isScanning) return;
+        if (!isScanning && !keepBadge) {
+            indicator.style.display = "none";
+            return;
+        }
         setScanningUI(false);
+        if (ws) {
+            try { ws.close(); } catch (_) {}
+            ws = null;
+        }
         if (pollTimer) {
             clearTimeout(pollTimer);
             pollTimer = null;
         }
-        if (abortController) {
-            abortController.abort();
-            abortController = null;
+        if (pollAbortController) {
+            pollAbortController.abort();
+            pollAbortController = null;
         }
         if (!keepBadge) {
             indicator.style.display = "none";
@@ -172,7 +265,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     rfidInput.addEventListener("click", () => {
-        startScanning();
+        if (!isScanning && !rfidInput.value) {
+            startScanning();
+        }
     });
 
     // Toggle scanning with button

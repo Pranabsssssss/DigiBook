@@ -93,7 +93,7 @@ class RFIDReader:
         logger.info("Connecting to RFID Relay Server: %s/node (Auth: %s)", self.server_url, self.auth_token[:3] + "*****")
         while not self._stop_event.is_set():
             try:
-                endpoint = f"{self.server_url}/node?wait=true"
+                endpoint = f"{self.server_url}/node?wait=true&auth={self.auth_token}"
                 req = urllib.request.Request(
                     endpoint,
                     headers={
