@@ -55,7 +55,9 @@ class DatabasePool:
             charset="utf8mb4",
             cursorclass=DictCursor,
             autocommit=False,
-            connect_timeout=10,
+            connect_timeout=3,
+            read_timeout=5,
+            write_timeout=5,
         )
 
     def initialize(self):
@@ -69,17 +71,21 @@ class DatabasePool:
             self._initialized = True
             logger.info("Initialized DatabasePool with %d connections.", self.pool_size)
 
-    def get_connection(self, timeout: float = 10.0) -> pymysql.Connection:
+    def get_connection(self, timeout: float = 4.0) -> pymysql.Connection:
         """Borrow a connection from the pool."""
         if not self._initialized:
             self.initialize()
         try:
             conn = self._pool.get(block=True, timeout=timeout)
-            # Ensure connection is alive; reconnect if severed
+            # Ensure connection is alive; reconnect quickly if severed
             try:
                 conn.ping(reconnect=True)
             except Exception as e:
-                logger.warning("Connection lost, creating new: %s", e)
+                logger.warning("Connection stale or lost, recreating: %s", e)
+                try:
+                    conn.close()
+                except Exception:
+                    pass
                 conn = self._create_connection()
             return conn
         except queue.Empty:

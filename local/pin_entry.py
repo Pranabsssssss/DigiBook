@@ -1,4 +1,5 @@
 import time
+import threading
 from typing import Optional, Tuple, List, Callable
 from core.models import Student
 from core.auth import authenticate_rfid_pin, set_student_pin, InvalidPinError, AccountLockedError
@@ -122,9 +123,17 @@ class PINEntryScreen:
 
     def check_submission(self, db=None) -> Tuple[bool, Optional[str]]:
         """
-        Check if 4 digits have been entered and submit.
+        Check if 4 digits have been entered and submit asynchronously.
         Returns: (success, session_token_or_error)
         """
+        if getattr(self, "is_verifying", False):
+            if hasattr(self, "_submission_result"):
+                res = self._submission_result
+                self.is_verifying = False
+                del self._submission_result
+                return res
+            return False, None
+
         if len(self.entered_pin) != 4:
             return False, None
 
@@ -137,29 +146,48 @@ class PINEntryScreen:
                 return False, None
             else:
                 # Check match
-                if self.entered_pin == self.creation_confirm_pin:
-                    # Save PIN in DB
-                    set_student_pin(self.student.id, self.entered_pin, db=db)
-                    self.student.pin_set = True
-                    # Authenticate directly
-                    _, token = authenticate_rfid_pin(self.student.rfid_key, self.entered_pin, db=db)
-                    return True, token
-                else:
+                if self.entered_pin != self.creation_confirm_pin:
                     self.show_error("PINs do not match. Please try again.")
                     self.creation_confirm_pin = ""
                     self.is_confirming = False
                     return False, None
 
+                self.is_verifying = True
+                pin_val = self.entered_pin
+
+                def _verify_create():
+                    try:
+                        set_student_pin(self.student.id, pin_val, db=db)
+                        self.student.pin_set = True
+                        _, token = authenticate_rfid_pin(self.student.rfid_key, pin_val, db=db)
+                        self._submission_result = (True, token)
+                    except Exception as e:
+                        self.show_error(f"Error setting PIN: {e}")
+                        self._submission_result = (False, None)
+
+                threading.Thread(target=_verify_create, daemon=True).start()
+                return False, None
+
         elif self.mode == self.MODE_LOGIN:
-            try:
-                _, token = authenticate_rfid_pin(self.student.rfid_key, self.entered_pin, db=db)
-                return True, token
-            except InvalidPinError:
-                self.show_error("Invalid PIN. Please try again.")
-                return False, None
-            except AccountLockedError:
-                self.show_error("Account locked: Too many failed attempts.")
-                return False, None
+            self.is_verifying = True
+            pin_val = self.entered_pin
+
+            def _verify_login():
+                try:
+                    _, token = authenticate_rfid_pin(self.student.rfid_key, pin_val, db=db)
+                    self._submission_result = (True, token)
+                except InvalidPinError:
+                    self.show_error("Invalid PIN. Please try again.")
+                    self._submission_result = (False, None)
+                except AccountLockedError:
+                    self.show_error("Account locked: Too many failed attempts.")
+                    self._submission_result = (False, None)
+                except Exception as e:
+                    self.show_error(f"Network error: {e}")
+                    self._submission_result = (False, None)
+
+            threading.Thread(target=_verify_login, daemon=True).start()
+            return False, None
 
         return False, None
 
@@ -213,8 +241,17 @@ class PINEntryScreen:
                 btn_lbl = self.font_btn.render(label, True, (255, 255, 255))
                 surface.blit(btn_lbl, (rx + (rw - btn_lbl.get_width()) // 2, ry + (rh - btn_lbl.get_height()) // 2))
 
+        # Verifying Status Banner
+        if getattr(self, "is_verifying", False):
+            v_box = pygame.Rect(self.width // 2 - 220, self.height - 70, 440, 45)
+            pygame.draw.rect(surface, (18, 38, 54), v_box, border_radius=8)
+            pygame.draw.rect(surface, (0, 240, 255), v_box, 2, border_radius=8)
+            if self.font_msg:
+                v_surf = self.font_msg.render("Verifying PIN with DigiBook Cloud...", True, (0, 240, 255))
+                surface.blit(v_surf, (v_box.centerx - v_surf.get_width() // 2, v_box.centery - v_surf.get_height() // 2))
+
         # Error Message Banner
-        if self.error_message and now < self.error_expiry:
+        elif self.error_message and now < self.error_expiry:
             err_box = pygame.Rect(self.width // 2 - 240, self.height - 70, 480, 45)
             pygame.draw.rect(surface, (90, 25, 25), err_box, border_radius=8)
             pygame.draw.rect(surface, (255, 80, 80), err_box, 2, border_radius=8)

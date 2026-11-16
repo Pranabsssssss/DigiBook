@@ -111,14 +111,21 @@ def save_whiteboard_strokes(
         # Delete old strokes for this whiteboard
         cur.execute("DELETE FROM whiteboard_strokes WHERE whiteboard_id = %s", (whiteboard_id,))
 
-        # Batch insert new strokes
-        insert_sql = """
-            INSERT INTO whiteboard_strokes (whiteboard_id, stroke_index, stroke_data, created_at)
-            VALUES (%s, %s, %s, NOW())
-        """
-        for idx, stroke in enumerate(strokes):
-            payload = json.dumps(stroke.to_dict())
-            cur.execute(insert_sql, (whiteboard_id, idx, payload))
+        # Fast bulk insert new strokes in a single batch
+        if strokes:
+            insert_sql = """
+                INSERT INTO whiteboard_strokes (whiteboard_id, stroke_index, stroke_data, created_at)
+                VALUES (%s, %s, %s, NOW())
+            """
+            batch_data = [
+                (whiteboard_id, idx, json.dumps(s.to_dict() if hasattr(s, "to_dict") else s))
+                for idx, s in enumerate(strokes)
+            ]
+            if hasattr(cur, "executemany"):
+                cur.executemany(insert_sql, batch_data)
+            else:
+                for row in batch_data:
+                    cur.execute(insert_sql, row)
 
         # Update whiteboard thumbnail and updated_at
         cur.execute(

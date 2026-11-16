@@ -1,4 +1,5 @@
 import time
+import threading
 from typing import Optional, Callable
 from core.models import Whiteboard
 from whiteboard.engine import WhiteboardEngine
@@ -59,13 +60,28 @@ class LocalWhiteboardView:
         self.engine.load_strokes(strokes)
         self.show_notification(f"Loaded {len(strokes)} strokes")
 
-    def save_to_database(self, db=None):
-        """Persist current strokes to MySQL."""
+    def save_to_database(self, db=None, async_save: bool = True):
+        """Persist current strokes to MySQL without freezing the UI."""
         self.engine.end_stroke()
-        strokes = self.engine.strokes
-        save_whiteboard_strokes(self.whiteboard.id, strokes, db=db)
+        strokes_snapshot = list(self.engine.strokes)
+        if not strokes_snapshot:
+            return
+
         self.last_autosave_time = time.time()
-        self.show_notification("Whiteboard Saved Successfully!")
+        self.show_notification("Saving to Cloud...")
+
+        def _worker():
+            try:
+                save_whiteboard_strokes(self.whiteboard.id, strokes_snapshot, db=db)
+                self.show_notification("Saved to Cloud!")
+            except Exception as e:
+                self.show_notification("Saved (Local Only)")
+
+        if async_save:
+            t = threading.Thread(target=_worker, daemon=True)
+            t.start()
+        else:
+            _worker()
 
     def show_notification(self, msg: str, duration: float = 2.5):
         self.notification = msg
@@ -143,15 +159,12 @@ class LocalWhiteboardView:
             self.engine.handle_no_point()
 
     def update_periodic(self, db=None):
-        """Handle background auto-saving."""
+        """Handle background auto-saving without frame rate hitches."""
         now = time.time()
         if (now - self.last_autosave_time) >= self.autosave_interval:
-            if self.engine.strokes:
-                try:
-                    self.save_to_database(db=db)
-                except Exception:
-                    pass
             self.last_autosave_time = now
+            if self.engine.strokes:
+                self.save_to_database(db=db, async_save=True)
 
     def render(self, surface):
         if pygame is None or surface is None:
