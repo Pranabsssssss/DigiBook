@@ -62,9 +62,9 @@ def parse_args():
 
 
 def measure_green_meter(frame_bgr: np.ndarray) -> tuple:
-    """Measure green channel dominance and excess: (G - R) + (G - B)."""
+    """Measure green channel dominance, excess, and exact coordinates: (G - R) + (G - B)."""
     if frame_bgr is None or frame_bgr.size == 0:
-        return False, 0.0
+        return False, 0.0, None
 
     b = frame_bgr[:, :, 0].astype(np.int16)
     g = frame_bgr[:, :, 1].astype(np.int16)
@@ -78,16 +78,39 @@ def measure_green_meter(frame_bgr: np.ndarray) -> tuple:
     mask = (gr >= 6) & (gb >= 6) & (excess >= 20)
     if np.any(mask):
         max_exc = float(np.max(excess[mask]))
-        return True, max_exc
-    return False, 0.0
+        py, px = np.where((excess == int(max_exc)) & mask)
+        if len(px) > 0:
+            best_pt = (int(px[0]), int(py[0]))
+            return True, max_exc, best_pt
+    return False, 0.0, None
 
 
 def draw_hud(frame_bgr: np.ndarray, cat_idx: int, counts: dict, target: int,
-             is_recording: bool, green_on: bool, green_excess: float) -> np.ndarray:
-    """Render high-contrast HUD for dataset capture."""
+             is_recording: bool, green_on: bool, green_excess: float,
+             detected_pt: tuple = None) -> np.ndarray:
+    """Render high-contrast HUD for dataset capture with live coordinate tracking."""
     hud = frame_bgr.copy()
     h, w = hud.shape[:2]
     cat = CATEGORIES[cat_idx]
+
+    # Draw active tracking reticle
+    if cat_idx == 2 and green_on and detected_pt is not None:
+        # Green LED ON: dynamic tracking ring locked directly onto active LED
+        cx, cy = detected_pt
+        cv2.circle(hud, (cx, cy), 22, (0, 240, 255), 2)
+        cv2.circle(hud, (cx, cy), 6, (0, 240, 255), -1)
+        cv2.drawMarker(hud, (cx, cy), (255, 255, 255), cv2.MARKER_CROSS, 28, 1)
+        cv2.putText(hud, f"LED LOCATED: ({cx},{cy})", (cx + 18, cy - 12),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.52, (0, 240, 255), 2)
+    elif cat_idx == 1:
+        # Green LED OFF: target framing box
+        box_w, box_h = int(w * 0.40), int(h * 0.45)
+        bx1 = (w - box_w) // 2
+        by1 = (h - box_h) // 2
+        cv2.rectangle(hud, (bx1, by1), (bx1 + box_w, by1 + box_h), (255, 200, 40), 2)
+        cv2.drawMarker(hud, (w // 2, h // 2), (255, 200, 40), cv2.MARKER_CROSS, 24, 1)
+        cv2.putText(hud, "[+] HOLD UNLIT PEN TIP INSIDE TARGET BOX", (bx1 + 10, by1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.50, (255, 200, 40), 2)
 
     # Top banner
     overlay = hud.copy()
@@ -221,7 +244,7 @@ def main():
             time.sleep(0.01)
             continue
 
-        green_on, green_excess = measure_green_meter(frame)
+        green_on, green_excess, detected_pt = measure_green_meter(frame)
 
         # Burst capture logic
         now = time.time()
@@ -239,7 +262,7 @@ def main():
                         current_cat = 2
                         print(f"[*] Auto-switched to Mode 2: Green LED ON.")
 
-        hud_frame = draw_hud(frame, current_cat, counts, target, is_recording, green_on, green_excess)
+        hud_frame = draw_hud(frame, current_cat, counts, target, is_recording, green_on, green_excess, detected_pt)
         disp = cv2.resize(hud_frame, (disp_w, disp_h))
 
         key = None
