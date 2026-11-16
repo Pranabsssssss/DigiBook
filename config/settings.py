@@ -91,3 +91,7 @@ DETECTED_SCREEN_WIDTH, DETECTED_SCREEN_HEIGHT = get_display_resolution(1920, 108
 SCREEN_WIDTH = DETECTED_SCREEN_WIDTH
 SCREEN_HEIGHT = DETECTED_SCREEN_HEIGHT
 DEFAULT_MODE = "production"
+
+# === Real-Time Cloud / Hardware RFID Relay Configuration ===
+RFID_RELAY_URL = os.environ.get("RFID_RELAY_URL", "https://rfid.pranab.space").rstrip("/")
+RFID_RELAY_AUTH = os.environ.get("RFID_RELAY_AUTH", "00000000")

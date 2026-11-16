@@ -39,3 +39,14 @@ def test_rfid_reader_wait_timeout():
     assert res is None
     assert 0.08 <= elapsed <= 0.35
     reader.cleanup()
+
+
+def test_rfid_relay_server_integration():
+    """Verify RFIDReader can connect and send command feedback to real-time relay."""
+    reader = RFIDReader(simulation=True)
+    assert reader.server_url.startswith("https://")
+    assert reader.auth_token == "00000000"
+    # Test sending hardware ping feedback
+    sent = reader.send_command(command="ping", action="test", message="Unit Test Ping")
+    assert sent is True, "Expected relay server to accept valid ping command"
+    reader.cleanup()

@@ -3,12 +3,15 @@ import logging
 import os
 import time
 import threading
-from typing import Optional, Tuple
+import urllib.request
+import urllib.error
+from typing import Optional, Tuple, Dict, Any
+
+from config.settings import RFID_RELAY_URL, RFID_RELAY_AUTH
 
 logger = logging.getLogger("DigiBook.RFID")
 
 SHARED_CARD_PATH = "/tmp/digibook_rfid_last.json"
-LOCK_PATH = "/tmp/digibook_rfid.lock"
 
 
 def broadcast_scanned_card(rfid_key: str):
@@ -17,7 +20,7 @@ def broadcast_scanned_card(rfid_key: str):
         return
     try:
         tmp_target = SHARED_CARD_PATH + ".tmp"
-        with open(tmp_target, "w") as f:
+        with open(tmp_target, "w", encoding="utf-8") as f:
             json.dump({"uid": str(rfid_key).strip(), "timestamp": time.time()}, f)
         os.replace(tmp_target, SHARED_CARD_PATH)
         try:
@@ -32,7 +35,7 @@ def get_broadcast_scanned_card(max_age: float = 2.0) -> Optional[str]:
     """Retrieve an RFID key detected by another process within the last max_age seconds."""
     try:
         if os.path.exists(SHARED_CARD_PATH):
-            with open(SHARED_CARD_PATH, "r") as f:
+            with open(SHARED_CARD_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
             ts = data.get("timestamp", 0)
             if (time.time() - ts) <= max_age:
@@ -44,117 +47,27 @@ def get_broadcast_scanned_card(max_age: float = 2.0) -> Optional[str]:
     return None
 
 
-# Conditional import of RC522 / RPi.GPIO
-RPI_RFID_AVAILABLE = False
-try:
-    from mfrc522 import SimpleMFRC522, MFRC522
-    import RPi.GPIO as GPIO
-    RPI_RFID_AVAILABLE = True
-
-    # --- CRITICAL BUGFIX FOR PYTHON 3.13 / mfrc522 PACKAGE ---
-    # 1. Fix MFRC522_ToCard bitwise inversion bug:
-    def _fixed_MFRC522_ToCard(self, command, sendData):
-        backData = []
-        backLen = 0
-        status = self.MI_ERR
-        irqEn = 0x00
-        waitIRq = 0x00
-        lastBits = None
-        n = 0
-
-        if command == self.PCD_AUTHENT:
-            irqEn = 0x12
-            waitIRq = 0x10
-        if command == self.PCD_TRANSCEIVE:
-            irqEn = 0x77
-            waitIRq = 0x30
-
-        self.Write_MFRC522(self.CommIEnReg, irqEn | 0x80)
-        self.ClearBitMask(self.CommIrqReg, 0x80)
-        self.SetBitMask(self.FIFOLevelReg, 0x80)
-
-        self.Write_MFRC522(self.CommandReg, self.PCD_IDLE)
-
-        for b in sendData:
-            self.Write_MFRC522(self.FIFODataReg, b)
-
-        self.Write_MFRC522(self.CommandReg, command)
-
-        if command == self.PCD_TRANSCEIVE:
-            self.SetBitMask(self.BitFramingReg, 0x80)
-
-        i = 2000
-        while True:
-            n = self.Read_MFRC522(self.CommIrqReg)
-            i -= 1
-            if i == 0 or (n & 0x01) != 0 or (n & waitIRq) != 0:
-                break
-
-        self.ClearBitMask(self.BitFramingReg, 0x80)
-
-        if i != 0:
-            err = self.Read_MFRC522(self.ErrorReg)
-            if (err & 0x1B) == 0x00:
-                status = self.MI_OK
-                if n & irqEn & 0x01:
-                    status = self.MI_NOTAGERR
-                if command == self.PCD_TRANSCEIVE:
-                    n = self.Read_MFRC522(self.FIFOLevelReg)
-                    lastBits = self.Read_MFRC522(self.ControlReg) & 0x07
-                    if lastBits != 0:
-                        backLen = (n - 1) * 8 + lastBits
-                    else:
-                        backLen = n * 8
-
-                    if n == 0:
-                        n = 1
-                    if n > self.MAX_LEN:
-                        n = self.MAX_LEN
-
-                    for _ in range(n):
-                        backData.append(self.Read_MFRC522(self.FIFODataReg))
-            else:
-                status = self.MI_ERR
-
-        return (status, backData, backLen)
-
-    MFRC522.MFRC522_ToCard = _fixed_MFRC522_ToCard
-
-    # 2. Fix MFRC522_Request strict 16-bit drop (allows 7-byte and non-classic NFC cards)
-    def _fixed_MFRC522_Request(self, reqMode):
-        self.Write_MFRC522(self.BitFramingReg, 0x07)
-        (status, backData, backBits) = self.MFRC522_ToCard(self.PCD_TRANSCEIVE, [reqMode])
-        if status != self.MI_OK or not backBits or backBits == 0:
-            status = self.MI_ERR
-        return (status, backBits)
-
-    MFRC522.MFRC522_Request = _fixed_MFRC522_Request
-
-    # 3. Fix AntennaOn bitmask logic
-    def _fixed_AntennaOn(self):
-        temp = self.Read_MFRC522(self.TxControlReg)
-        if (temp & 0x03) != 0x03:
-            self.SetBitMask(self.TxControlReg, 0x03)
-
-    MFRC522.AntennaOn = _fixed_AntennaOn
-
-except (ImportError, RuntimeError):
-    pass
-
-
 class RFIDReader:
     """
-    High-Performance, Multi-Threaded RC522 RFID Hardware Driver.
+    Real-Time Cloud & Local Relay RFID Client for DigiBook.
+    Connects to the zero-latency ESP8266 / ESP32 RFID Relay Server (rfid.pranab.space /node).
     Features:
-      - Continuous 25Hz non-blocking background scanning daemon (never misses taps).
-      - Zero-overhead main thread consumption (0.01ms instant read in run.py).
-      - Cross-process IPC broadcast syncing between local display and Flask webapp.
-      - Debounce filter preventing repeated duplicate rapid-fire triggers.
+      - Continuous non-blocking background long-polling daemon (instant tap detection).
+      - Zero local hardware bus conflicts: no SPI, no GPIO pin collisions, no Python 3.13 issues.
+      - Receives 20-character deterministic encrypted discriminant keys.
+      - 2-way command feedback: can trigger hardware buzzer / LED flash on access granted.
+      - Instant zero-overhead consumption in run.py and webapp registration.
     """
 
-    def __init__(self, simulation: bool = False):
+    def __init__(
+        self,
+        server_url: Optional[str] = None,
+        auth_token: Optional[str] = None,
+        simulation: bool = False,
+    ):
         self.simulation = simulation
-        self.reader = None
+        self.server_url = (server_url or RFID_RELAY_URL).rstrip("/")
+        self.auth_token = auth_token or RFID_RELAY_AUTH
         self._sim_instance = None
 
         # Threading & Scan buffer
@@ -166,92 +79,73 @@ class RFIDReader:
         self._worker_thread: Optional[threading.Thread] = None
 
         if not self.simulation:
-            if not RPI_RFID_AVAILABLE:
-                logger.warning(
-                    "mfrc522 or RPi.GPIO is not available on this platform. "
-                    "Falling back to simulation mode for RFID."
-                )
-                self.simulation = True
-            else:
-                try:
-                    GPIO.setwarnings(False)
-                    self.reader = SimpleMFRC522()
-                    # Keep transmitter antenna continuously powered with max gain (48dB)
-                    try:
-                        self.reader.READER.Write_MFRC522(self.reader.READER.RFCfgReg, 0x07 << 4)
-                        self.reader.READER.AntennaOn()
-                    except Exception:
-                        pass
+            # Start background relay listener daemon
+            self._worker_thread = threading.Thread(
+                target=self._relay_listener_loop,
+                daemon=True,
+                name="RFID-Relay-Client"
+            )
+            self._worker_thread.start()
+            logger.info("RFID Relay Client active: listening to %s/node", self.server_url)
 
-                    # Start continuous hardware polling daemon
-                    self._worker_thread = threading.Thread(
-                        target=self._daemon_poll_loop,
-                        daemon=True,
-                        name="RFID-Hardware-Daemon"
-                    )
-                    self._worker_thread.start()
-                    logger.info("RC522 RFID hardware daemon active on SPI (Gain: 48dB, 25Hz Polling).")
-                except Exception as e:
-                    logger.error("Failed to initialize RC522 hardware: %s. Falling back to simulation.", e)
-                    self.simulation = True
-
-    def _read_raw_card(self) -> Optional[str]:
-        """Poll the RC522 chip directly using multi-tier request protocols."""
-        if self.reader is None:
-            return None
-        try:
-            m = self.reader.READER
-
-            # Strategy A: Standard SimpleMFRC522 read_id_no_block
-            card_id = self.reader.read_id_no_block()
-            if card_id is not None:
-                return str(card_id).strip()
-
-            # Strategy B: WUPA (0x52) wakes cards in HALT/IDLE/READY states
-            status, _ = m.MFRC522_Request(m.PICC_REQALL)
-            if status == m.MI_OK:
-                status_ac, raw_uid = m.MFRC522_Anticoll()
-                if status_ac == m.MI_OK and raw_uid:
-                    return str(self.reader.uid_to_num(raw_uid)).strip()
-
-            # Strategy C: Standard REQA (0x26)
-            status, _ = m.MFRC522_Request(m.PICC_REQIDL)
-            if status == m.MI_OK:
-                status_ac, raw_uid = m.MFRC522_Anticoll()
-                if status_ac == m.MI_OK and raw_uid:
-                    return str(self.reader.uid_to_num(raw_uid)).strip()
-        except Exception:
-            pass
-        return None
-
-    def _daemon_poll_loop(self):
-        """Dedicated background worker polling RC522 hardware continuously."""
+    def _relay_listener_loop(self):
+        """Continuous long-polling background worker connecting to the RFID Relay Server."""
+        logger.info("Connecting to RFID Relay Server: %s/node (Auth: %s)", self.server_url, self.auth_token[:3] + "*****")
         while not self._stop_event.is_set():
             try:
-                card_id_str = self._read_raw_card()
-                if card_id_str:
-                    now = time.time()
-                    with self._lock:
-                        # Debounce: new card OR > 1.4s since previous scan of same card
-                        if card_id_str != self._last_uid or (now - self._last_scan_time) > 1.4:
-                            self._last_uid = card_id_str
-                            self._last_scan_time = now
-                            self._unread_card = (card_id_str, "")
-                            broadcast_scanned_card(card_id_str)
-                            logger.info("RFID card captured by daemon: UID=%s", card_id_str)
-            except Exception as e:
-                logger.debug("Error in RFID daemon loop: %s", e)
+                endpoint = f"{self.server_url}/node?wait=true"
+                req = urllib.request.Request(
+                    endpoint,
+                    headers={
+                        "User-Agent": "DigiBook-AI-Agent/2.0",
+                        "x-auth-token": self.auth_token,
+                        "Authorization": f"Bearer {self.auth_token}",
+                        "Accept": "application/json",
+                    }
+                )
+                # 30-second timeout matching server's 25-second wait cycle
+                with urllib.request.urlopen(req, timeout=32) as response:
+                    raw_data = response.read().decode("utf-8")
+                    if not raw_data:
+                        continue
 
-            # Sleep 40ms (~25 Hz polling, optimal response time with zero CPU load)
-            time.sleep(0.04)
+                    data = json.loads(raw_data)
+                    # Check for RFID scan event
+                    if data.get("type") == "rfid":
+                        card_key = (
+                            data.get("encryptedKey")
+                            or data.get("discriminant")
+                            or data.get("uid")
+                        )
+                        if card_key:
+                            card_key = str(card_key).strip()
+                            now = time.time()
+                            with self._lock:
+                                # Debounce: new card OR > 1.2s since previous scan of same card
+                                if card_key != self._last_uid or (now - self._last_scan_time) > 1.2:
+                                    self._last_uid = card_key
+                                    self._last_scan_time = now
+                                    self._unread_card = (card_key, "")
+                                    broadcast_scanned_card(card_key)
+                                    logger.info("RFID card scanned via Relay Server: Key=%s", card_key)
+
+            except urllib.error.HTTPError as e:
+                logger.warning("RFID Relay Server HTTP Error: %s %s", e.code, e.reason)
+                time.sleep(2.0)
+            except (urllib.error.URLError, TimeoutError) as e:
+                # Normal 25-second poll timeout or network retry
+                time.sleep(0.3)
+            except Exception as e:
+                logger.debug("RFID Relay listener exception: %s", e)
+                time.sleep(1.0)
 
     def read_card_nonblocking(self) -> Optional[Tuple[str, str]]:
         """
         Instantaneous, non-blocking check for scanned RFID card.
-        Consumes the buffered card from the background daemon or IPC broadcast.
+        Consumes the buffered card from the background relay listener or IPC broadcast.
         Returns: (rfid_key, card_text) or None.
         """
-        # 1. Check local background hardware daemon / injected buffer
+        # 1. Check local background buffer
         with self._lock:
             if self._unread_card is not None:
                 card = self._unread_card
@@ -266,7 +160,7 @@ class RFIDReader:
         if recent_broadcast:
             now = time.time()
             with self._lock:
-                if recent_broadcast != self._last_uid or (now - self._last_scan_time) > 1.4:
+                if recent_broadcast != self._last_uid or (now - self._last_scan_time) > 1.2:
                     self._last_uid = recent_broadcast
                     self._last_scan_time = now
                     return (recent_broadcast, "")
@@ -292,6 +186,41 @@ class RFIDReader:
 
             time.sleep(0.03)
 
+    def send_command(
+        self,
+        command: str = "flash",
+        action: str = "access_granted",
+        message: str = "Welcome User",
+        timeout: float = 3.0,
+    ) -> bool:
+        """
+        Send a 2-way hardware command back to the ESP8266 / ESP32 reader
+        (e.g. flash LED, beep buzzer on login success).
+        """
+        try:
+            payload = json.dumps({
+                "command": command,
+                "action": action,
+                "cardKey": self._last_uid,
+                "message": message,
+            }).encode("utf-8")
+
+            req = urllib.request.Request(
+                f"{self.server_url}/node",
+                data=payload,
+                headers={
+                    "User-Agent": "DigiBook-AI-Agent/2.0",
+                    "Content-Type": "application/json",
+                    "x-auth-token": self.auth_token,
+                    "Authorization": f"Bearer {self.auth_token}",
+                }
+            )
+            with urllib.request.urlopen(req, timeout=timeout) as res:
+                return res.status == 200
+        except Exception as e:
+            logger.debug("Failed to send 2-way command to RFID relay: %s", e)
+            return False
+
     def _simulated_wait_for_card(self, timeout: Optional[float] = None) -> Optional[Tuple[str, str]]:
         """Fallback simulation prompt if accessed directly."""
         if self._sim_instance is None:
@@ -300,20 +229,8 @@ class RFIDReader:
         return self._sim_instance.wait_for_card(timeout=timeout)
 
     def cleanup(self):
-        """Signal background worker to stop and release GPIO resources."""
+        """Signal background worker to stop."""
         self._stop_event.set()
         if self._worker_thread and self._worker_thread.is_alive():
             self._worker_thread.join(timeout=0.5)
-
-        if RPI_RFID_AVAILABLE and not self.simulation:
-            try:
-                if self.reader:
-                    try:
-                        self.reader.READER.AntennaOff()
-                    except Exception:
-                        pass
-                import RPi.GPIO as GPIO
-                GPIO.cleanup()
-                logger.info("RFID GPIO resources cleaned up.")
-            except Exception as e:
-                logger.debug("Error during GPIO cleanup: %s", e)
+        logger.info("RFID Relay Client stopped.")

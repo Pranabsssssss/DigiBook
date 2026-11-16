@@ -89,5 +89,5 @@ class RFIDScanScreen:
             if self.simulation_mode:
                 hint_txt = self.font_hint.render("[Simulation Mode: Press 'R' on keyboard to scan default RFID]", True, (100, 120, 140))
             else:
-                hint_txt = self.font_hint.render("📡 RC522 Hardware Active: Hold RFID card against reader (Press 'R' to test)", True, (0, 240, 255))
+                hint_txt = self.font_hint.render("📡 Real-time RFID Relay Active: Tap card on ESP reader to scan (Press 'R' to test)", True, (0, 240, 255))
             surface.blit(hint_txt, (self.width // 2 - hint_txt.get_width() // 2, self.height - 40))

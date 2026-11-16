@@ -251,11 +251,15 @@ def main():
                         pin_screen = PINEntryScreen(width, height, stu, mode=PINEntryScreen.MODE_CREATE)
                         state = STATE_PIN_CREATE
                         logger.info("Student '%s' recognized! Starting first-time 4-digit PIN setup.", stu.student_name)
+                        if hasattr(rfid_reader, "send_command"):
+                            rfid_reader.send_command(command="beep", action="scan_ok", message="Card Scanned")
                     elif scan_status == "NEEDS_PIN_ENTRY":
                         current_student = stu
                         pin_screen = PINEntryScreen(width, height, stu, mode=PINEntryScreen.MODE_LOGIN)
                         state = STATE_PIN_LOGIN
                         logger.info("Student '%s' recognized! Prompting for 4-digit PIN.", stu.student_name)
+                        if hasattr(rfid_reader, "send_command"):
+                            rfid_reader.send_command(command="beep", action="scan_ok", message="Card Scanned")
                     elif scan_status == "NOT_FOUND":
                         rfid_screen.show_error(f"UID {uid}: Not in Database (Register Student)", duration=4.5)
                         logger.warning("RFID UID '%s' is NOT present in the database! Register student at https://digibook.pranab.space/signup", uid)
@@ -313,6 +317,8 @@ def main():
                     dashboard.refresh_whiteboards(db=db)
                     state = STATE_DASHBOARD
                     logger.info("Authentication complete. Switched to dashboard.")
+                    if hasattr(rfid_reader, "send_command"):
+                        rfid_reader.send_command(command="flash", action="access_granted", message=f"Welcome {current_student.student_name}")
 
             elif state == STATE_DASHBOARD and dashboard is not None:
                 # Mouse hover highlight for cards and buttons
