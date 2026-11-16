@@ -37,6 +37,8 @@ calibration_data/
 saves/
 logs/*.log
 dataset_captured/
+dataset/green_led_on/
+dataset/green_led_off/
 test_frame*.png
 test_*.png
 
