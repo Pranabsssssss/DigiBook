@@ -52,10 +52,12 @@ CATEGORIES = {
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Capture Green LED Dataset for Model Retraining")
+    parser = argparse.ArgumentParser(description="Capture Green LED Dataset for Model Retraining at Full Camera Resolution")
     parser.add_argument("-t", "--target", type=int, default=100, help="Target images per category (default: 100)")
     parser.add_argument("-d", "--device", type=int, default=CAMERA_DEVICE_INDEX, help="Camera device index (default: 0)")
-    parser.add_argument("-s", "--scale", type=float, default=1.5, help="Display window scale factor (default: 1.5)")
+    parser.add_argument("-W", "--width", type=int, default=0, help="Target camera width (0 for max hardware resolution)")
+    parser.add_argument("-H", "--height", type=int, default=0, help="Target camera height (0 for max hardware resolution)")
+    parser.add_argument("-s", "--scale", type=float, default=0.0, help="Display window scale (0 for auto-fit to screen)")
     return parser.parse_args()
 
 
@@ -142,12 +144,31 @@ def main():
         cat['target'] = target
 
     cap = cv2.VideoCapture(args.device)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-    if not cap.isOpened():
+    # Request full maximum possible hardware resolution
+    req_w = args.width if args.width > 0 else 3840
+    req_h = args.height if args.height > 0 else 2160
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, req_w)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, req_h)
+
+    actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+
+    if not cap.isOpened() or actual_w <= 0:
         print(f"[!] Error: Could not open camera device {args.device}")
         sys.exit(1)
+
+    print(f"[*] Camera Initialized at Full Native Resolution: {actual_w}x{actual_h} @ {fps:.0f} FPS")
+
+    # Compute preview display window resolution (max 1280x720 so it fits nicely on screen)
+    if args.scale > 0.0:
+        disp_w = int(actual_w * args.scale)
+        disp_h = int(actual_h * args.scale)
+    else:
+        disp_scale = min(1.0, 1280.0 / max(1, actual_w), 720.0 / max(1, actual_h))
+        disp_w = int(actual_w * disp_scale)
+        disp_h = int(actual_h * disp_scale)
 
     counts = {
         1: len(list(DIR_OFF.glob("*.jpg"))),
@@ -159,21 +180,20 @@ def main():
     last_capture_time = 0.0
     capture_interval = 0.08  # ~12 fps during burst
 
-    window_name = "DigiBook — Green LED Dataset Capture Studio"
+    window_name = f"DigiBook — Green LED Capture Studio ({actual_w}x{actual_h} Full Res)"
     use_pygame_fallback = False
     pg_screen = None
     pg_clock = None
 
     try:
         cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(window_name, disp_w, disp_h)
     except Exception as e:
         print(f"[*] OpenCV HighGUI note ({e}). Falling back to Pygame display...")
         use_pygame_fallback = True
         try:
             import pygame
             pygame.init()
-            disp_w = int(640 * args.scale)
-            disp_h = int(480 * args.scale)
             pg_screen = pygame.display.set_mode((disp_w, disp_h))
             pygame.display.set_caption(window_name)
             pg_clock = pygame.time.Clock()
@@ -182,7 +202,7 @@ def main():
             sys.exit(1)
 
     print("=" * 65)
-    print("   DIGIBOOK GREEN LED DATASET CAPTURE STUDIO")
+    print(f"   DIGIBOOK FULL RESOLUTION DATASET CAPTURE ({actual_w}x{actual_h})")
     print(f"   Target: {target} images OFF, {target} images ON")
     print("=" * 65)
     print("Controls:")
@@ -220,9 +240,6 @@ def main():
                         print(f"[*] Auto-switched to Mode 2: Green LED ON.")
 
         hud_frame = draw_hud(frame, current_cat, counts, target, is_recording, green_on, green_excess)
-
-        disp_w = int(640 * args.scale)
-        disp_h = int(480 * args.scale)
         disp = cv2.resize(hud_frame, (disp_w, disp_h))
 
         key = None

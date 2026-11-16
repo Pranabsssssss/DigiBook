@@ -159,13 +159,19 @@ def train_model(dir_on: Path, dir_off: Path, epochs: int = 500, lr: float = 0.05
 
     k5 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
 
-    # 1. Process POSITIVE images (Green LED ON)
-    print(f"\n[1/4] Extracting positive green emission features from {len(on_images)} images...")
+    # 1. Process POSITIVE images (Green LED ON at FULL CAMERA RESOLUTION)
+    print(f"\n[1/4] Extracting positive green emission features from {len(on_images)} images at FULL RESOLUTION...")
+    native_res = None
     for idx, fpath in enumerate(on_images):
         img = cv2.imread(str(fpath))
         if img is None:
             continue
-        img = cv2.resize(img, (640, 480))
+
+        h_orig, w_orig = img.shape[:2]
+        if native_res is None:
+            native_res = (w_orig, h_orig)
+            print(f"[*] Processing Dataset at Full Native Sensor Resolution: {w_orig}x{h_orig}")
+
         b, g, r = cv2.split(img)
 
         gr = cv2.subtract(g, r)
@@ -178,16 +184,23 @@ def train_model(dir_on: Path, dir_off: Path, epochs: int = 500, lr: float = 0.05
         _, m_exc = cv2.threshold(exc, 18, 255, cv2.THRESH_BINARY)
         active = cv2.bitwise_and(lead, m_exc)
 
-        active[:20, :] = 0
-        active[-20:, :] = 0
-        active[:, :20] = 0
-        active[:, -20:] = 0
+        # Dynamic margins scaled to resolution
+        scale_factor = (w_orig * h_orig) / (640.0 * 480.0)
+        margin_y = max(15, int(h_orig * 0.035))
+        margin_x = max(15, int(w_orig * 0.035))
+        active[:margin_y, :] = 0
+        active[-margin_y:, :] = 0
+        active[:, :margin_x] = 0
+        active[:, -margin_x:] = 0
+
+        min_area = max(15, int(15 * scale_factor))
+        max_area = int(14000 * scale_factor)
 
         cnts, _ = cv2.findContours(active, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         found = False
         for c in cnts:
             area = cv2.contourArea(c)
-            if not (15 <= area <= 4000):
+            if not (min_area <= area <= max_area):
                 continue
             peri = cv2.arcLength(c, True)
             circ = (4.0 * np.pi * area) / (peri * peri) if peri > 0 else 0.0
@@ -198,7 +211,7 @@ def train_model(dir_on: Path, dir_off: Path, epochs: int = 500, lr: float = 0.05
             if not (0.3 <= ar <= 3.2):
                 continue
 
-            roi = img[max(0, yb):min(480, yb+hb), max(0, xb):min(640, xb+wb)]
+            roi = img[max(0, yb):min(h_orig, yb+hb), max(0, xb):min(w_orig, xb+wb)]
             peak_val = float(np.max(roi))
             if peak_val < 75:
                 continue
@@ -215,49 +228,53 @@ def train_model(dir_on: Path, dir_off: Path, epochs: int = 500, lr: float = 0.05
                 pos_features.append(extract_features_green(rot_roi, peak_val, ar, circ))
                 pos_excess_list.append(feat[1])
 
-        # Also extract negative patches from background of ON images (desk, hands, paper)
+        # Extract negative patches from background of ON images
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         bg_cand = (exc < 10) & (gray > 60)
         by, bx = np.where(bg_cand)
         if len(bx) > 50:
-            for _ in range(3):
+            crop_rad = max(12, int(12 * np.sqrt(scale_factor)))
+            for _ in range(4):
                 ri = np.random.randint(0, len(bx))
                 px, py = bx[ri], by[ri]
-                crop = img[max(0, py-12):min(480, py+12), max(0, px-12):min(640, px+12)]
+                crop = img[max(0, py-crop_rad):min(h_orig, py+crop_rad), max(0, px-crop_rad):min(w_orig, px+crop_rad)]
                 if crop.shape[0] >= 10 and crop.shape[1] >= 10:
                     feat_neg = extract_features_green(crop, float(np.max(crop)), 1.0, 0.7)
                     neg_features.append(feat_neg)
                     neg_excess_list.append(feat_neg[1])
 
-    # 2. Process NEGATIVE images (Green LED OFF - unlit pen, body, tip, desk)
-    print(f"[2/4] Extracting negative & bulb tip features from {len(off_images)} images...")
+    # 2. Process NEGATIVE images (Green LED OFF at FULL RESOLUTION)
+    print(f"[2/4] Extracting negative & bulb tip features from {len(off_images)} images at FULL RESOLUTION...")
     for idx, fpath in enumerate(off_images):
         img = cv2.imread(str(fpath))
         if img is None:
             continue
-        img = cv2.resize(img, (640, 480))
+
+        h_orig, w_orig = img.shape[:2]
+        scale_factor = (w_orig * h_orig) / (640.0 * 480.0)
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-        # Extract 5mm bulb tip template candidates
-        # Find high-contrast stylus tip points
-        corners = cv2.goodFeaturesToTrack(gray, maxCorners=12, qualityLevel=0.08, minDistance=25)
+        # Extract 5mm bulb tip template candidates scaled to full resolution
+        patch_rad = max(14, int(14 * np.sqrt(scale_factor)))
+        corners = cv2.goodFeaturesToTrack(gray, maxCorners=14, qualityLevel=0.08, minDistance=int(25 * np.sqrt(scale_factor)))
         if corners is not None:
             for pt in corners:
                 cx, cy = int(pt[0][0]), int(pt[0][1])
-                if 25 <= cx <= 615 and 25 <= cy <= 455:
-                    tip_patch = gray[cy-14:cy+14, cx-14:cx+14]
-                    if tip_patch.shape == (28, 28) and len(tip_templates) < 24:
+                if patch_rad <= cx <= (w_orig - patch_rad) and patch_rad <= cy <= (h_orig - patch_rad):
+                    tip_patch = gray[cy-patch_rad:cy+patch_rad, cx-patch_rad:cx+patch_rad]
+                    if tip_patch.shape == (patch_rad*2, patch_rad*2) and len(tip_templates) < 32:
                         tip_templates.append(tip_patch)
-                    crop = img[cy-12:cy+12, cx-12:cx+12]
+                    crop = img[cy-patch_rad:cy+patch_rad, cx-patch_rad:cx+patch_rad]
                     feat = extract_features_green(crop, float(np.max(crop)), 1.0, 0.75)
                     neg_features.append(feat)
                     neg_excess_list.append(feat[1])
 
-        # Background desk / paper / hands sampling
+        # Background sampling
+        crop_rad = max(12, int(12 * np.sqrt(scale_factor)))
         for _ in range(6):
-            rx = np.random.randint(20, 620)
-            ry = np.random.randint(20, 460)
-            bg_crop = img[ry-12:ry+12, rx-12:rx+12]
+            rx = np.random.randint(crop_rad, w_orig - crop_rad)
+            ry = np.random.randint(crop_rad, h_orig - crop_rad)
+            bg_crop = img[ry-crop_rad:ry+crop_rad, rx-crop_rad:rx+crop_rad]
             if bg_crop.shape[0] >= 10 and bg_crop.shape[1] >= 10:
                 feat = extract_features_green(bg_crop, float(np.max(bg_crop)), 1.0, 0.7)
                 neg_features.append(feat)
@@ -350,6 +367,7 @@ def train_model(dir_on: Path, dir_off: Path, epochs: int = 500, lr: float = 0.05
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "gpu_accelerated": gpu_info["name"],
         "led_type": "green",
+        "native_resolution": list(native_res) if native_res else [1920, 1080],
         "mean": mean.tolist(),
         "std": std.tolist(),
         "weights": weights.tolist(),
@@ -373,13 +391,19 @@ def train_model(dir_on: Path, dir_off: Path, epochs: int = 500, lr: float = 0.05
         json.dump(model_data, f, indent=2)
     print(f"[✓] Model exported to: {green_model_path}")
 
-    # Export bulb tip templates
+    # Export bulb tip templates (both Full HD high-res and standard 28x28 for Pi)
     TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
     template_count = 0
-    for idx, tmpl in enumerate(tip_templates[:12]):
+    for idx, tmpl in enumerate(tip_templates[:16]):
         t_name = f"user_rtx5050_tip_{idx:02d}.png"
         cv2.imwrite(str(TEMPLATES_DIR / t_name), tmpl)
         template_count += 1
+
+        if tmpl.shape != (28, 28):
+            std_tmpl = cv2.resize(tmpl, (28, 28), interpolation=cv2.INTER_AREA)
+            cv2.imwrite(str(TEMPLATES_DIR / f"user_rtx5050_tip_{idx:02d}_std.png"), std_tmpl)
+            template_count += 1
+
         for rot in [-25, 25]:
             M = cv2.getRotationMatrix2D((tmpl.shape[1]/2, tmpl.shape[0]/2), rot, 1.0)
             rot_tmpl = cv2.warpAffine(tmpl, M, (tmpl.shape[1], tmpl.shape[0]))
@@ -387,7 +411,7 @@ def train_model(dir_on: Path, dir_off: Path, epochs: int = 500, lr: float = 0.05
             template_count += 1
 
     print(f"[✓] Exported {template_count} calibrated bulb tip templates to: {TEMPLATES_DIR}")
-    print("\n[✓] Retraining Complete! The model is optimized for 60 FPS real-time detection on Raspberry Pi.")
+    print("\n[✓] Retraining Complete! Model calibrated at FULL resolution and optimized for Raspberry Pi real-time tracking.")
     return True
 
 
