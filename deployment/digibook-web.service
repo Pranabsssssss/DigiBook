@@ -8,11 +8,11 @@ Type=simple
 User=book
 Group=book
 WorkingDirectory=/home/book/Desktop/DigiBook
-Environment="PATH=/home/book/Desktop/DigiBook/venv/bin:/usr/local/bin:/usr/bin:/bin"
-EnvironmentFile=/home/book/Desktop/DigiBook/.env
-ExecStart=/home/book/Desktop/DigiBook/venv/bin/gunicorn -c deployment/gunicorn.conf.py "webapp.app:create_app()"
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=-/home/book/Desktop/DigiBook/.env
+ExecStart=/usr/bin/gunicorn -c deployment/gunicorn.conf.py "webapp.app:create_app()"
 Restart=always
-RestartSec=5
+RestartSec=3
 KillMode=mixed
 TimeoutStopSec=10
 
