@@ -1,4 +1,5 @@
 import os
+import math
 import json
 from pathlib import Path
 import cv2
@@ -84,7 +85,19 @@ class IRDetector:
                 self.model_threshold = float(model_data.get("threshold", 0.50))
                 self.model_name = f"{model_data.get('model_name', 'LED_Model')}"
                 self.has_model = True
-                print(f"[IRDetector] Loaded trained ML model ({self.model_name}) from: {target_model}")
+
+                # Apply calibrated optical thresholds from model
+                if self.led_type == "green":
+                    if "green_excess_threshold" in model_data:
+                        self.green_excess_threshold = float(model_data["green_excess_threshold"])
+                    if "green_spectral_ratio_min" in model_data:
+                        self.green_spectral_ratio_min = float(model_data["green_spectral_ratio_min"])
+                    if "min_area" in model_data:
+                        self.min_area = int(model_data["min_area"])
+                    if "max_area" in model_data:
+                        self.max_area = int(model_data["max_area"])
+
+                print(f"[IRDetector] Loaded trained ML model ({self.model_name}) from: {target_model} (excess_thresh={self.green_excess_threshold:.1f}, ratio_min={self.green_spectral_ratio_min:.2f})")
             except Exception as e:
                 print(f"[IRDetector] Warning: Could not load model: {e}")
 
@@ -569,7 +582,7 @@ class IRDetector:
             if self.led_type == "green":
                 p_excess = float(np.max(excess[max(0, y_b):min(h, y_b + h_b), max(0, x_b):min(w, x_b + w_b)]))
                 p_ratio = (2.0 * pg) / max(1.0, pr + pb)
-                min_peak = max(130.0, float(self.threshold))
+                min_peak = max(110.0, float(self.threshold))
                 if (p_peak < min_peak or
                     p_excess < self.green_excess_threshold or
                     p_ratio < self.green_spectral_ratio_min):
@@ -593,7 +606,29 @@ class IRDetector:
                     # Outside calibrated display boundaries -> do not draw
                     continue
 
-            score = (p_excess * 3.0) + (p_peak * 1.5) + (circ * 50.0)
+            # Base score from optical emission
+            score = (p_excess * 3.0) + (p_peak * 1.5) + (circ * 40.0)
+
+            # ML Classifier confidence bonus / false-positive rejection
+            model_prob = 1.0
+            if self.has_model and self.weights is not None and len(self.weights) == 12:
+                try:
+                    gray_patch = cv2.cvtColor(patch_bgr, cv2.COLOR_BGR2GRAY)
+                    feat = self.extract_patch_features(patch_bgr, gray_patch, ar=ar, circ=circ)
+                    feat_norm = (feat - self.mean) / (self.std + 1e-7)
+                    logit = float(np.dot(feat_norm, self.weights) + self.bias)
+                    model_prob = float(1.0 / (1.0 + np.exp(-np.clip(logit, -20.0, 20.0))))
+                    if model_prob < 0.20:
+                        continue
+                    score += model_prob * 80.0
+                except Exception:
+                    pass
+
+            # Temporal continuity tracking: lock onto continuous pen strokes,
+            # preventing sudden jumps to corner reflections or distant room lights
+            if self.last_bulb_pos is not None and self.frames_since_seen <= 8:
+                dist = math.hypot(cx - self.last_bulb_pos[0], cy - self.last_bulb_pos[1])
+                score += max(0.0, 120.0 - (dist * 0.4))
 
             candidates.append({
                 "point": (cx, cy),

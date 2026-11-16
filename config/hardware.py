@@ -27,11 +27,12 @@ LED_PEN_HAS_BUTTON = True
 # Green LEDs emit at ~520-530nm. When active, camera sensor records high Green (G)
 # with suppressed Red (R) and Blue (B).
 # Green Excess = (G - R) + (G - B).
-GREEN_EXCESS_THRESHOLD = 35.0      # Stricter threshold to reject diffuse room reflections & UI glow
-GREEN_SPECTRAL_RATIO_MIN = 1.28    # 2*G / (max(1.0, R + B))
-GREEN_THRESHOLD = 140              # Minimum peak brightness for genuine LED emission hotspot
-GREEN_MIN_AREA = 10
-GREEN_MAX_AREA = 1800
+# Calibrated against 200 ground-truth images on RTX 5050 GPU
+GREEN_EXCESS_THRESHOLD = 22.0      # Calibrated 5th-percentile emission baseline
+GREEN_SPECTRAL_RATIO_MIN = 1.25    # 2*G / (max(1.0, R + B))
+GREEN_THRESHOLD = 115              # Minimum peak brightness for genuine LED emission hotspot
+GREEN_MIN_AREA = 14
+GREEN_MAX_AREA = 3500
 
 # --- IR / Near-Infrared Spectral Thresholds ---
 IR_THRESHOLD = 240

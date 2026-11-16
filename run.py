@@ -269,13 +269,19 @@ def main():
             cam_point, _, _, metadata = detector.detect_debug(frame)
             is_emitting = metadata.get("is_emitting", False)
 
-            # If camera does not see active pen, mouse can provide pointer coordinates
-            if cam_point is None and pygame.mouse.get_focused():
-                mx, my = pygame.mouse.get_pos()
+            # Direct screen mouse input (optional desktop dev / click fallback)
+            mouse_screen_pt = None
+            mouse_emitting = False
+            if pygame.mouse.get_focused():
                 m_pressed = pygame.mouse.get_pressed()
                 if m_pressed[0]:
-                    is_emitting = True
-                cam_point = (mx, my)
+                    # User is actively clicking/dragging with the mouse
+                    mouse_screen_pt = pygame.mouse.get_pos()
+                    mouse_emitting = True
+
+            # When camera does not see pen, active mouse click provides direct screen coordinates (never passes through homography)
+            active_screen_pt = mouse_screen_pt if (cam_point is None and mouse_screen_pt is not None) else None
+            active_emitting = is_emitting or mouse_emitting
 
             # --- Active View Processing & Rendering ---
             if state == STATE_WAIT_RFID:
@@ -291,9 +297,10 @@ def main():
 
                 event_type, scr_pt, _ = input_manager.update(
                     cam_point=cam_point,
-                    is_emitting=is_emitting,
+                    is_emitting=active_emitting,
                     zones=pin_screen.zones,
                     is_drawing_mode=False,
+                    screen_point=active_screen_pt,
                 )
                 pin_screen.render(screen)
                 input_manager.render_cursor(screen)
@@ -317,9 +324,10 @@ def main():
 
                 event_type, scr_pt, _ = input_manager.update(
                     cam_point=cam_point,
-                    is_emitting=is_emitting,
+                    is_emitting=active_emitting,
                     zones=dashboard.zones,
                     is_drawing_mode=False,
+                    screen_point=active_screen_pt,
                 )
                 dashboard.render(screen)
                 input_manager.render_cursor(screen)
@@ -334,25 +342,21 @@ def main():
 
                 event_type, scr_pt, _ = input_manager.update(
                     cam_point=cam_point,
-                    is_emitting=is_emitting,
+                    is_emitting=active_emitting,
                     zones=whiteboard_view.zones,
                     is_drawing_mode=True,
+                    screen_point=active_screen_pt,
                 )
 
-                # Mouse drawing support: left-click and drag on canvas
-                mouse_drawing = False
-                if pygame.mouse.get_pressed()[0]:
-                    mx, my = pygame.mouse.get_pos()
-                    over_toolbar = any(z.contains((mx, my)) for z in whiteboard_view.zones)
+                if scr_pt and active_emitting:
+                    # Check if over toolbar buttons: don't draw on top of toolbar
+                    over_toolbar = any(z.contains(scr_pt) for z in whiteboard_view.zones)
                     if not over_toolbar:
-                        mouse_drawing = True
-                        whiteboard_view.handle_screen_point(mx, my, is_emitting=True)
-
-                if not mouse_drawing:
-                    if scr_pt:
-                        whiteboard_view.handle_screen_point(scr_pt[0], scr_pt[1], is_emitting=is_emitting)
+                        whiteboard_view.handle_screen_point(scr_pt[0], scr_pt[1], is_emitting=True)
                     else:
                         whiteboard_view.handle_screen_point(0, 0, is_emitting=False)
+                else:
+                    whiteboard_view.handle_screen_point(0, 0, is_emitting=False)
 
                 whiteboard_view.update_periodic(db=db)
                 whiteboard_view.render(screen)

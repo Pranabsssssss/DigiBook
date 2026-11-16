@@ -64,9 +64,17 @@ class LEDInputManager:
         is_emitting: bool = False,
         zones: Optional[List[InteractiveZone]] = None,
         is_drawing_mode: bool = False,
+        screen_point: Optional[Tuple[int, int]] = None,
     ) -> Tuple[str, Optional[Tuple[int, int]], Optional[str]]:
         """
         Process a single frame tracking output.
+
+        Args:
+            cam_point: Detected LED coordinates in camera pixel space (transformed via H).
+            is_emitting: True if LED is emitting light / pen button pressed.
+            zones: Clickable interactive screen zones.
+            is_drawing_mode: True if active in whiteboard view.
+            screen_point: Optional direct screen coordinate (e.g. mouse), bypassing homography.
 
         Returns:
             (event_type, screen_point, triggered_zone_id)
@@ -74,21 +82,43 @@ class LEDInputManager:
         now = time.time()
         self.is_emitting = is_emitting
 
-        if cam_point is None:
+        # Determine raw screen position
+        if screen_point is not None:
+            scr_x, scr_y = float(screen_point[0]), float(screen_point[1])
+        elif cam_point is not None:
+            if self.transformer is not None:
+                scr_x, scr_y = self.transformer.transform(cam_point)
+            else:
+                scr_x, scr_y = cam_point
+        else:
             self.smoothed_pos = None
             self.raw_screen_pos = None
             self._reset_dwell()
             return InputEvent.IDLE, None, None
 
-        # Transform to screen coordinate space
-        if self.transformer is not None:
-            scr_x, scr_y = self.transformer.transform(cam_point)
-        else:
-            scr_x, scr_y = cam_point
+        # Boundary safety check: Reject extreme mathematical homography singularities
+        max_w = getattr(self.transformer, "screen_width", 1920) if self.transformer else 1920
+        max_h = getattr(self.transformer, "screen_height", 1080) if self.transformer else 1080
+        if scr_x < -60 or scr_x > max_w + 60 or scr_y < -60 or scr_y > max_h + 60:
+            return InputEvent.IDLE, None, None
+
+        # Anti-spike jump filter: human hand cannot physically teleport > 350px in 33ms
+        if self.smoothed_pos is not None and is_emitting and screen_point is None:
+            prev_x, prev_y = self.smoothed_pos
+            jump_dist = math.hypot(scr_x - prev_x, scr_y - prev_y)
+            if jump_dist > 350.0:
+                self._outlier_count = getattr(self, "_outlier_count", 0) + 1
+                if self._outlier_count < 3:
+                    # Suppress isolated 1-frame outlier jump
+                    int_prev = (int(prev_x), int(prev_y))
+                    return (InputEvent.DRAW if is_drawing_mode else InputEvent.HOVER), int_prev, None
+            else:
+                self._outlier_count = 0
 
         # Apply Exponential Moving Average (EMA) smoothing
-        if self.smoothed_pos is None:
+        if self.smoothed_pos is None or getattr(self, "_outlier_count", 0) >= 3:
             self.smoothed_pos = (scr_x, scr_y)
+            self._outlier_count = 0
         else:
             prev_x, prev_y = self.smoothed_pos
             sm_x = self.smoothing_alpha * scr_x + (1.0 - self.smoothing_alpha) * prev_x
@@ -106,9 +136,12 @@ class LEDInputManager:
                     if zone.contains(int_pt):
                         return self._process_zone_dwell(zone, int_pt, now)
 
-            # Not over any button -> Drawing action
+            # Not over any button -> Drawing action if emitting, Hover if unlit
             self._reset_dwell()
-            return InputEvent.DRAW, int_pt, None
+            if is_emitting:
+                return InputEvent.DRAW, int_pt, None
+            else:
+                return InputEvent.HOVER, int_pt, None
 
         # In UI / Dashboard / PIN Entry navigation mode:
         if zones:
