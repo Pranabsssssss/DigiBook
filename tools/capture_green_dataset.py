@@ -160,7 +160,26 @@ def main():
     capture_interval = 0.08  # ~12 fps during burst
 
     window_name = "DigiBook — Green LED Dataset Capture Studio"
-    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    use_pygame_fallback = False
+    pg_screen = None
+    pg_clock = None
+
+    try:
+        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    except Exception as e:
+        print(f"[*] OpenCV HighGUI note ({e}). Falling back to Pygame display...")
+        use_pygame_fallback = True
+        try:
+            import pygame
+            pygame.init()
+            disp_w = int(640 * args.scale)
+            disp_h = int(480 * args.scale)
+            pg_screen = pygame.display.set_mode((disp_w, disp_h))
+            pygame.display.set_caption(window_name)
+            pg_clock = pygame.time.Clock()
+        except Exception as pe:
+            print(f"[!] Could not initialize display: {pe}")
+            sys.exit(1)
 
     print("=" * 65)
     print("   DIGIBOOK GREEN LED DATASET CAPTURE STUDIO")
@@ -205,44 +224,93 @@ def main():
         disp_w = int(640 * args.scale)
         disp_h = int(480 * args.scale)
         disp = cv2.resize(hud_frame, (disp_w, disp_h))
-        cv2.imshow(window_name, disp)
 
-        key = cv2.waitKey(1) & 0xFF
-        if key == 27:  # ESC
-            break
-        elif key == ord('1'):
-            current_cat = 1
-            is_recording = False
-        elif key == ord('2'):
-            current_cat = 2
-            is_recording = False
-        elif key == ord('c') or key == ord('C'):
-            cat = CATEGORIES[current_cat]
-            counts[current_cat] += 1
-            fname = cat['dir'] / f"{cat['key']}_{counts[current_cat]:04d}.jpg"
-            cv2.imwrite(str(fname), frame)
-            print(f"[+] Saved {fname.name} ({counts[current_cat]}/{target})")
-        elif key == ord(' '):
-            # Space toggles or bursts
-            is_recording = not is_recording
-        elif key == ord('r') or key == ord('R'):
-            cat = CATEGORIES[current_cat]
-            for f in cat['dir'].glob("*.jpg"):
-                try:
-                    f.unlink()
-                except Exception:
-                    pass
-            counts[current_cat] = 0
-            print(f"[-] Cleared all images in {cat['dir']}")
-        elif key == 13:  # ENTER
-            if counts[1] >= target and counts[2] >= target:
-                print("\n[✓] Both categories complete! Ready for RTX 5050 training.")
+        key = None
+        if not use_pygame_fallback:
+            try:
+                cv2.imshow(window_name, disp)
+                cv_k = cv2.waitKey(1) & 0xFF
+                if cv_k != 255:
+                    key = cv_k
+            except Exception:
+                use_pygame_fallback = True
+                import pygame
+                pygame.init()
+                pg_screen = pygame.display.set_mode((disp_w, disp_h))
+                pygame.display.set_caption(window_name)
+                pg_clock = pygame.time.Clock()
+
+        if use_pygame_fallback and pg_screen is not None:
+            import pygame
+            # Convert BGR to RGB for Pygame surface
+            disp_rgb = cv2.cvtColor(disp, cv2.COLOR_BGR2RGB)
+            surf = pygame.image.frombuffer(disp_rgb.tobytes(), (disp_w, disp_h), 'RGB')
+            pg_screen.blit(surf, (0, 0))
+            pygame.display.flip()
+            if pg_clock:
+                pg_clock.tick(30)
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    key = 27
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        key = 27
+                    elif event.key == pygame.K_1:
+                        key = ord('1')
+                    elif event.key == pygame.K_2:
+                        key = ord('2')
+                    elif event.key == pygame.K_SPACE:
+                        key = ord(' ')
+                    elif event.key == pygame.K_c:
+                        key = ord('c')
+                    elif event.key == pygame.K_r:
+                        key = ord('r')
+                    elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                        key = 13
+
+        if key is not None:
+            if key == 27:  # ESC
                 break
-            else:
-                print(f"[!] Need {target} images each. Current: OFF={counts[1]}/{target}, ON={counts[2]}/{target}")
+            elif key == ord('1'):
+                current_cat = 1
+                is_recording = False
+            elif key == ord('2'):
+                current_cat = 2
+                is_recording = False
+            elif key == ord('c') or key == ord('C'):
+                cat = CATEGORIES[current_cat]
+                counts[current_cat] += 1
+                fname = cat['dir'] / f"{cat['key']}_{counts[current_cat]:04d}.jpg"
+                cv2.imwrite(str(fname), frame)
+                print(f"[+] Saved {fname.name} ({counts[current_cat]}/{target})")
+            elif key == ord(' '):
+                is_recording = not is_recording
+            elif key == ord('r') or key == ord('R'):
+                cat = CATEGORIES[current_cat]
+                for f in cat['dir'].glob("*.jpg"):
+                    try:
+                        f.unlink()
+                    except Exception:
+                        pass
+                counts[current_cat] = 0
+                print(f"[-] Cleared all images in {cat['dir']}")
+            elif key == 13:  # ENTER
+                if counts[1] >= target and counts[2] >= target:
+                    print("\n[✓] Both categories complete! Ready for RTX 5050 training.")
+                    break
+                else:
+                    print(f"[!] Need {target} images each. Current: OFF={counts[1]}/{target}, ON={counts[2]}/{target}")
 
     cap.release()
-    cv2.destroyAllWindows()
+    if not use_pygame_fallback:
+        cv2.destroyAllWindows()
+    else:
+        try:
+            import pygame
+            pygame.quit()
+        except Exception:
+            pass
 
     print("\nCapture Summary:")
     print(f"  Green LED OFF images: {counts[1]}/{target} in {DIR_OFF}")
