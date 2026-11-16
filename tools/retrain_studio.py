@@ -21,6 +21,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
 from tools.capture_green_dataset import main as run_capture, DIR_ON, DIR_OFF
+from tools.annotate_dataset import annotate_all
 from tools.train_green_model_gpu import train_model
 
 
@@ -28,7 +29,8 @@ def main():
     parser = argparse.ArgumentParser(description="DigiBook Complete Retraining Studio")
     parser.add_argument("-t", "--target", type=int, default=100, help="Target images per category (default: 100)")
     parser.add_argument("-d", "--device", type=int, default=0, help="Camera device index (default: 0)")
-    parser.add_argument("--skip-capture", action="store_true", help="Skip capture and train directly on existing dataset")
+    parser.add_argument("--skip-capture", action="store_true", help="Skip capture and mark/train on existing images")
+    parser.add_argument("--skip-annotation", action="store_true", help="Skip manual marking and auto-train directly")
     args = parser.parse_args()
 
     print("=" * 70)
@@ -39,7 +41,7 @@ def main():
         print("\n>>> STEP 1: Launching Camera Capture Studio...")
         print("  - Mode 1: Hold pen UNLIT, hold Spacebar to capture 100 frames.")
         print("  - Mode 2: Press button for GREEN LED ON, hold Spacebar to capture 100 frames.")
-        print("  - Press [ENTER] when both reach 100 images to start training.\n")
+        print("  - Press [ENTER] when captured to proceed to manual marking.\n")
         try:
             run_capture()
         except KeyboardInterrupt:
@@ -52,10 +54,21 @@ def main():
 
     if on_count == 0 or off_count == 0:
         print(f"\n[!] Dataset incomplete: Found {off_count} OFF images, {on_count} ON images.")
-        print(f"    Please capture at least some images before retraining.")
+        print(f"    Please capture images before retraining.")
         return
 
-    print("\n>>> STEP 2: Running RTX 5050 GPU Training Pipeline...")
+    # Step 2: Manual Ground-Truth Coordinate Annotation
+    if not args.skip_annotation:
+        print("\n>>> STEP 2: Ground-Truth Coordinate Annotation Studio...")
+        print("  - For each image, click directly on the LED / bulb tip with the 4x Loupe.")
+        print("  - Press [SPACE] to accept & advance, [B] to go back, [S] to skip blurry frames.")
+        print("  - Press [ESC] when finished to launch RTX 5050 training.\n")
+        try:
+            annotate_all()
+        except KeyboardInterrupt:
+            print("\n[-] Annotation paused. Existing marked coordinates saved.")
+
+    print("\n>>> STEP 3: Running RTX 5050 GPU Training Pipeline with Exact Ground-Truth...")
     success = train_model(DIR_ON, DIR_OFF, epochs=500, lr=0.05)
 
     if success:

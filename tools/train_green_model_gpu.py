@@ -151,6 +151,22 @@ def train_model(dir_on: Path, dir_off: Path, epochs: int = 500, lr: float = 0.05
         print("[!] Error: Not enough images found. Please run tools/capture_green_dataset.py first.")
         return False
 
+    # Load Ground-Truth Manual Annotations if available
+    annotations_file = DATASET_DIR / "annotations.json"
+    annotations = {}
+    if annotations_file.exists():
+        try:
+            with open(annotations_file, "r", encoding="utf-8") as f:
+                annotations = json.load(f)
+            annot_on_count = len([v for v in annotations.get("green_led_on", {}).values() if v is not None])
+            annot_off_count = len([v for v in annotations.get("green_led_off", {}).values() if v is not None])
+            print(f"[*] Loaded Ground-Truth Labels: {annot_on_count} ON coordinates, {annot_off_count} OFF coordinates from {annotations_file.name}")
+        except Exception:
+            pass
+
+    annotated_on = annotations.get("green_led_on", {})
+    annotated_off = annotations.get("green_led_off", {})
+
     pos_features = []
     neg_features = []
     pos_excess_list = []
@@ -173,7 +189,30 @@ def train_model(dir_on: Path, dir_off: Path, epochs: int = 500, lr: float = 0.05
             print(f"[*] Processing Dataset at Full Native Sensor Resolution: {w_orig}x{h_orig}")
 
         b, g, r = cv2.split(img)
+        scale_factor = (w_orig * h_orig) / (640.0 * 480.0)
 
+        # Priority A: Use Ground-Truth manual coordinate if marked by user
+        gt_pt = annotated_on.get(fpath.name)
+        if gt_pt is not None:
+            gx, gy = int(gt_pt[0]), int(gt_pt[1])
+            crop_rad = max(16, int(18 * np.sqrt(scale_factor)))
+            y1 = max(0, gy - crop_rad)
+            y2 = min(h_orig, gy + crop_rad)
+            x1 = max(0, gx - crop_rad)
+            x2 = min(w_orig, gx + crop_rad)
+            roi = img[y1:y2, x1:x2]
+            if roi.shape[0] >= 8 and roi.shape[1] >= 8:
+                peak_val = float(np.max(roi))
+                feat = extract_features_green(roi, peak_val, 1.0, 0.85)
+                pos_features.append(feat)
+                pos_excess_list.append(feat[1])
+                for angle in [-20, -10, 10, 20]:
+                    M = cv2.getRotationMatrix2D((roi.shape[1]/2, roi.shape[0]/2), angle, 1.0)
+                    rot_roi = cv2.warpAffine(roi, M, (roi.shape[1], roi.shape[0]))
+                    pos_features.append(extract_features_green(rot_roi, peak_val, 1.0, 0.85))
+                    pos_excess_list.append(feat[1])
+
+        # Priority B: Optical emission detection
         gr = cv2.subtract(g, r)
         gb = cv2.subtract(g, b)
         exc = cv2.add(gr, gb)
@@ -185,7 +224,6 @@ def train_model(dir_on: Path, dir_off: Path, epochs: int = 500, lr: float = 0.05
         active = cv2.bitwise_and(lead, m_exc)
 
         # Dynamic margins scaled to resolution
-        scale_factor = (w_orig * h_orig) / (640.0 * 480.0)
         margin_y = max(15, int(h_orig * 0.035))
         margin_x = max(15, int(w_orig * 0.035))
         active[:margin_y, :] = 0
@@ -197,7 +235,6 @@ def train_model(dir_on: Path, dir_off: Path, epochs: int = 500, lr: float = 0.05
         max_area = int(14000 * scale_factor)
 
         cnts, _ = cv2.findContours(active, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        found = False
         for c in cnts:
             area = cv2.contourArea(c)
             if not (min_area <= area <= max_area):
@@ -219,7 +256,6 @@ def train_model(dir_on: Path, dir_off: Path, epochs: int = 500, lr: float = 0.05
             feat = extract_features_green(roi, peak_val, ar, circ)
             pos_features.append(feat)
             pos_excess_list.append(feat[1])
-            found = True
 
             # Augmented variations (rotations and jitter)
             for angle in [-20, -10, 10, 20]:
@@ -254,10 +290,23 @@ def train_model(dir_on: Path, dir_off: Path, epochs: int = 500, lr: float = 0.05
         scale_factor = (w_orig * h_orig) / (640.0 * 480.0)
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-        # Extract 5mm bulb tip template candidates scaled to full resolution
+        # Priority A: Ground-Truth unlit bulb tip coordinate
+        gt_pt_off = annotated_off.get(fpath.name)
         patch_rad = max(14, int(14 * np.sqrt(scale_factor)))
+        if gt_pt_off is not None:
+            gx, gy = int(gt_pt_off[0]), int(gt_pt_off[1])
+            if patch_rad <= gx <= (w_orig - patch_rad) and patch_rad <= gy <= (h_orig - patch_rad):
+                tip_patch = gray[gy-patch_rad:gy+patch_rad, gx-patch_rad:gx+patch_rad]
+                if tip_patch.shape == (patch_rad*2, patch_rad*2) and len(tip_templates) < 36:
+                    tip_templates.append(tip_patch)
+                crop = img[gy-patch_rad:gy+patch_rad, gx-patch_rad:gx+patch_rad]
+                feat = extract_features_green(crop, float(np.max(crop)), 1.0, 0.75)
+                neg_features.append(feat)
+                neg_excess_list.append(feat[1])
+
+        # Priority B: Feature corner detection
         corners = cv2.goodFeaturesToTrack(gray, maxCorners=14, qualityLevel=0.08, minDistance=int(25 * np.sqrt(scale_factor)))
-        if corners is not None:
+        if corners is not None and len(tip_templates) < 12:
             for pt in corners:
                 cx, cy = int(pt[0][0]), int(pt[0][1])
                 if patch_rad <= cx <= (w_orig - patch_rad) and patch_rad <= cy <= (h_orig - patch_rad):
