@@ -41,12 +41,21 @@ def test_rfid_reader_wait_timeout():
     reader.cleanup()
 
 
-def test_rfid_relay_server_integration():
+def test_rfid_relay_server_integration(monkeypatch):
     """Verify RFIDReader can connect and send command feedback to real-time relay."""
+    import urllib.request
+    from unittest.mock import MagicMock
+
     reader = RFIDReader(simulation=True)
     assert reader.server_url.startswith("https://")
     assert reader.auth_token == "00000000"
-    # Test sending hardware ping feedback
-    sent = reader.send_command(command="ping", action="test", message="Unit Test Ping")
-    assert sent is True, "Expected relay server to accept valid ping command"
+
+    mock_resp = MagicMock()
+    mock_resp.status = 200
+    mock_resp.__enter__.return_value = mock_resp
+
+    with monkeypatch.context() as m:
+        m.setattr(urllib.request, "urlopen", MagicMock(return_value=mock_resp))
+        sent = reader.send_command(command="ping", action="test", message="Unit Test Ping")
+        assert sent is True, "Expected relay server to accept valid ping command"
     reader.cleanup()

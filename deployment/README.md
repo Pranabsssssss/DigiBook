@@ -1,6 +1,6 @@
 # DigiBook — Production Deployment & Service Configuration
 
-This guide provides end-to-end instructions for deploying DigiBook on a **Raspberry Pi 3B+** running **Raspberry Pi OS (64-bit Bookworm or Bullseye)** with domain **`https://digibook.pranav.space`** exposed via **Cloudflare Tunnel**.
+This guide provides end-to-end instructions for deploying DigiBook on a **Raspberry Pi 3B+** running **Raspberry Pi OS (64-bit Bookworm or Bullseye)** with domain **`https://digibook.pranab.space`** exposed via **Cloudflare Tunnel**.
 
 ---
 
@@ -93,7 +93,7 @@ nano .env
 
 ---
 
-## 5. Cloudflare Tunnel Configuration (`digibook.pranav.space`)
+## 5. Cloudflare Tunnel Configuration (`digibook.pranab.space`)
 
 Install `cloudflared` on Raspberry Pi:
 ```bash
@@ -109,7 +109,7 @@ cloudflared tunnel create digibook
 
 Route the DNS record to the tunnel:
 ```bash
-cloudflared tunnel route dns digibook digibook.pranav.space
+cloudflared tunnel route dns digibook digibook.pranab.space
 ```
 
 Configure tunnel ingress:
@@ -131,7 +131,7 @@ sudo systemctl start cloudflared
 ## 6. Systemd Services Installation
 
 DigiBook runs two managed services on the Raspberry Pi:
-1. `digibook-web.service`: Gunicorn WSGI server exposing the Flask web application locally on port 5000 (which Cloudflare Tunnel forwards to `https://digibook.pranav.space`).
+1. `digibook-web.service`: Gunicorn WSGI server exposing the Flask web application locally on port 5000 (which Cloudflare Tunnel forwards to `https://digibook.pranab.space`).
 2. `digibook-local.service`: Fullscreen Pygame whiteboard, RFID scanner, and Logitech camera green LED tracker.
 
 Install unit files:

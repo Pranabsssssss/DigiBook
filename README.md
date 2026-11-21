@@ -1,6 +1,6 @@
 # 📚 DigiBook — RFID-Based Digital Whiteboard System
 
-DigiBook is an interactive digital whiteboard system designed for the **Raspberry Pi 3B+**. Students scan their personal **RFID cards** using an **RC522 reader**, authenticate with a **4-digit PIN**, interact with their saved whiteboards using a **green LED pen** and a **Logitech USB tracking camera**, and access their whiteboards remotely via a web application at **`https://digibook.pranav.space`**.
+DigiBook is an interactive digital whiteboard system designed for the **Raspberry Pi 3B+**. Students scan their personal **RFID cards** using an **RC522 reader**, authenticate with a **4-digit PIN**, interact with their saved whiteboards using a **green LED pen** and a **Logitech USB tracking camera**, and access their whiteboards remotely via a web application at **`https://digibook.pranab.space`**.
 
 ---
 
@@ -18,7 +18,7 @@ DigiBook is an interactive digital whiteboard system designed for the **Raspberr
 
 ```
                                   Cloudflare Tunnel
-                               (digibook.pranav.space)
+                               (digibook.pranab.space)
                                           │
                                           ▼
 ┌──────────────────┐            ┌───────────────────┐
@@ -146,7 +146,7 @@ Open **`http://localhost:5000`** in your browser to access the signup, signin, d
 
 ## 🍓 Production Raspberry Pi Deployment
 
-For comprehensive deployment instructions, systemd service installation, and Cloudflare Tunnel setup for `https://digibook.pranav.space`, see:
+For comprehensive deployment instructions, systemd service installation, and Cloudflare Tunnel setup for `https://digibook.pranab.space`, see:
 👉 [deployment/README.md](deployment/README.md)
 
 ---
